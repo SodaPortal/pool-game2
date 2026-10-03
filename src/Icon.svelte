@@ -1,0 +1,5 @@
+<script lang="ts">
+  let {name,size=20}:{name:string;size?:number}=$props();
+  const paths:Record<string,string>={computer:'M4 4h16v12H4V4m4 16h8m-4-4v4M8 8h2m4 0h2m-7 4h6',arrow:'M5 12h14m-6-6 6 6-6 6',reset:'M3 10a9 9 0 1 1 2 8M3 4v6h6',sound:'M11 5 6 9H3v6h3l5 4V5m4 3a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14',mute:'M11 5 6 9H3v6h3l5 4V5m5 4 5 6m0-6-5 6',expand:'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5',help:'M9 8a3 3 0 1 1 5 2c-2 1-2 2-2 3m0 3v1M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',close:'m6 6 12 12M18 6 6 18',target:'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0m-5 0a5 5 0 1 1-10 0 5 5 0 0 1 10 0M12 9v6m-3-3h6',chevron:'m9 5 7 7-7 7',mouse:'M12 3c-4 0-6 3-6 6v6a6 6 0 0 0 12 0V9c0-3-2-6-6-6Zm0 0v7',bolt:'m13 2-9 12h7l-1 8 10-13h-7l1-7',check:'m5 12 4 4L19 6',pause:'M8 5v14M16 5v14',play:'m8 5 11 7-11 7V5',sun:'M12 3v2m0 14v2M3 12h2m14 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2m-3 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0'};
+</script>
+<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={paths[name]??paths.target}/></svg>
