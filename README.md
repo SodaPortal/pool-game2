@@ -38,7 +38,7 @@ npm run test:e2e
 
 `npm run preview` serves the production build. Deploy `dist/` to any static host.
 
-The production app is hosted on Vercel as `sodaportals-projects/pool-game2`. `vercel.json` configures the Vite build. After logging in and linking this project with the Vercel CLI, run `npx vercel deploy --prod` to publish updates. Automatic deployments from GitHub require connecting the repository in the Vercel project's Git settings.
+The production app is hosted on Vercel as `sodaportals-projects/pool-game2`, connected to the GitHub repository `SodaPortal/pool-game2`. Pushes to `main` automatically deploy to https://pool-game2.vercel.app; other branches receive preview deployments. `vercel.json` configures the Vite build. For a manual deployment after logging in and linking this project with the Vercel CLI, run `npx vercel deploy --prod`.
 
 Physics runs at a fixed 240 Hz independently of rendering, with equal-mass collision impulses, cushion restitution, rolling resistance, pocket detection, and collision-safe placement. Rendering scales to the display pixel ratio. Audio is synthesized after user interaction. The game pauses when its tab is hidden. Google Fonts are optional; local fallbacks work without network access.
 
