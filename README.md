@@ -2,6 +2,8 @@
 
 A responsive browser pool game built with Svelte 5, TypeScript, Vite, Canvas 2D, and Web Audio. No backend or account required.
 
+**Play live:** https://pool-game2.vercel.app
+
 ## Run
 
 Requires Node.js 22.12+ (or Node.js 24).
@@ -35,6 +37,8 @@ npm run test:e2e
 ```
 
 `npm run preview` serves the production build. Deploy `dist/` to any static host.
+
+The production app is hosted on Vercel as `sodaportals-projects/pool-game2`. `vercel.json` configures the Vite build. After logging in and linking this project with the Vercel CLI, run `npx vercel deploy --prod` to publish updates. Automatic deployments from GitHub require connecting the repository in the Vercel project's Git settings.
 
 Physics runs at a fixed 240 Hz independently of rendering, with equal-mass collision impulses, cushion restitution, rolling resistance, pocket detection, and collision-safe placement. Rendering scales to the display pixel ratio. Audio is synthesized after user interaction. The game pauses when its tab is hidden. Google Fonts are optional; local fallbacks work without network access.
 
