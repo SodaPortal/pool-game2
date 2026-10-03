@@ -97,3 +97,48 @@ test('difficulty selection applies to new matches, persists, and cancels safely'
  await page.reload();await page.getByRole('button',{name:'New game',exact:true}).click();
  await expect(page.getByRole('radio',{name:'Hard',exact:true})).toBeChecked();
 });
+
+test('spin target supports dragging, keyboard adjustments, and reset on mobile',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/');
+ const target=page.getByRole('button',{name:/^Cue ball spin:/});
+ await target.scrollIntoViewIfNeeded();const rect=(await target.boundingBox())!;
+ await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);await page.mouse.down();
+ await page.mouse.move(rect.x+rect.width*.95,rect.y+rect.height*.95,{steps:5});await page.mouse.up();
+ expect(Number(await page.getByRole('slider',{name:'Side spin',exact:true}).inputValue())).toBeCloseTo(71,0);
+ expect(Number(await page.getByRole('slider',{name:'Draw or follow spin'}).inputValue())).toBeCloseTo(-71,0);
+ await target.focus();await page.keyboard.press('Home');
+ await expect(page.getByRole('slider',{name:'Side spin',exact:true})).toHaveValue('0');
+ await expect(page.getByRole('slider',{name:'Draw or follow spin'})).toHaveValue('0');
+ await page.keyboard.press('ArrowUp');await expect(page.getByRole('slider',{name:'Draw or follow spin'})).toHaveValue('10');
+ await page.keyboard.press('Shift+ArrowRight');await expect(page.getByRole('slider',{name:'Side spin',exact:true})).toHaveValue('2');
+ await page.keyboard.press('Space');await expect(page.locator('.shot-count strong')).toHaveText('01');
+ await expect(page.getByRole('slider',{name:'Draw or follow spin'})).toHaveValue('0');
+ await page.getByRole('slider',{name:'Side spin',exact:true}).fill('-40');await page.getByRole('slider',{name:'Draw or follow spin'}).fill('50');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+ await page.screenshot({path:'test-results/spin-mobile.png',fullPage:true});
+ await page.getByRole('button',{name:'Reset spin',exact:true}).click();
+ await expect(page.getByRole('slider',{name:'Side spin',exact:true})).toHaveValue('0');
+ await expect(page.getByRole('slider',{name:'Draw or follow spin'})).toHaveValue('0');
+});
+
+test('spin is locked during a shot and resets when the balls settle',async({page})=>{
+ await page.clock.install();await page.goto('/');
+ await page.getByRole('slider',{name:'Draw or follow spin'}).fill('-80');
+ await page.getByRole('button',{name:'Take shot'}).click();
+ await expect(page.getByRole('button',{name:/^Cue ball spin:/})).toBeDisabled();
+ await expect(page.getByRole('slider',{name:'Draw or follow spin'})).toBeDisabled();
+ await page.clock.runFor(15000);
+ await expect(page.getByRole('slider',{name:'Draw or follow spin'})).toHaveValue('0');
+ await expect(page.getByRole('slider',{name:'Side spin',exact:true})).toHaveValue('0');
+ await page.getByRole('button',{name:'New game',exact:true}).click();await page.getByRole('button',{name:'Local two-player'}).click();
+ await page.getByRole('slider',{name:'Side spin',exact:true}).fill('60');
+ await page.getByRole('button',{name:'Pause game',exact:true}).click();await expect(page.getByRole('slider',{name:'Side spin',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Back to the table'}).click();await expect(page.getByRole('slider',{name:'Side spin',exact:true})).toHaveValue('60');
+ await page.getByRole('button',{name:'New game',exact:true}).click();await page.getByRole('button',{name:'Vs computer'}).click();
+ await expect(page.getByRole('slider',{name:'Side spin',exact:true})).toHaveValue('0');
+ await page.getByRole('slider',{name:'Draw or follow spin'}).fill('70');await page.locator('#power').fill('5');await page.getByRole('button',{name:'Take shot'}).click();
+ await page.clock.runFor(1200);
+ await expect(page.locator('.player-label strong')).toHaveText('Computer');
+ await expect(page.getByRole('slider',{name:'Draw or follow spin'})).toBeDisabled();
+ await expect(page.getByRole('slider',{name:'Draw or follow spin'})).toHaveValue('0');
+});

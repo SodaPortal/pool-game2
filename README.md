@@ -19,6 +19,8 @@ On Windows PowerShell with restricted execution policies, use `npm.cmd` instead 
 
 - Point at the table to aim, drag back to set power, and release to shoot. A click alone only aims.
 - Alternatively, use the power slider and **Take shot**.
+- Cue spin: drag the red dot on the cue-ball target, or use the two spin sliders. Top applies follow after contact, bottom applies draw, and left/right changes cushion rebound angles. Diagonal positions combine these effects, with total spin limited to the target circle. The focused spin target supports arrow keys (Shift for fine adjustment); Home or Space centers it. **Reset spin** also centers it.
+- Spin locks while a shot is in progress and resets after it settles or when starting a new game. The aim guide previews first contact, not the later spin-influenced path. The computer uses center-ball shots.
 - Keyboard: left/right to aim, Shift for fine aiming, up/down for power, Space to shoot, Escape to pause. Focus the table first.
 - Ball in hand: point and click to place, or use arrows and Space.
 - Solo practice: clear all 15 balls in the fewest shots. Personal best is saved on this browser.
@@ -40,8 +42,8 @@ npm run test:e2e
 
 The production app is hosted on Vercel as `sodaportals-projects/pool-game2`, connected to the GitHub repository `SodaPortal/pool-game2`. Pushes to `main` automatically deploy to https://pool-game2.vercel.app; other branches receive preview deployments. `vercel.json` configures the Vite build. For a manual deployment after logging in and linking this project with the Vercel CLI, run `npx vercel deploy --prod`.
 
-Physics runs at a fixed 240 Hz independently of rendering, with equal-mass collision impulses, cushion restitution, rolling resistance, pocket detection, and collision-safe placement. Rendering scales to the display pixel ratio. Audio is synthesized after user interaction. The game pauses when its tab is hidden. Google Fonts are optional; local fallbacks work without network access.
+Physics runs at a fixed 240 Hz independently of rendering, with equal-mass collision impulses, cushion restitution, rolling resistance, pocket detection, and collision-safe placement. Cue spin uses a simplified decaying rotational reserve: draw/follow develops progressively through cloth traction after ball contact, and side spin exchanges tangential speed with cushions. Rendering scales to the display pixel ratio. Audio is synthesized after user interaction. The game pauses when its tab is hidden. Google Fonts are optional; local fallbacks work without network access.
 
 The computer ranks clear potting paths, contact shots, and one-cushion escapes, then evaluates up to 24 candidates using cloned instances of the same physics and rules. It tries to pot its group and avoids scratches and early eights. All computation happens locally; no service or API key is needed.
 
-This is a local game without online matchmaking. Physics approximates a flat table and does not simulate jump shots or cue spin.
+This is a local game without online matchmaking. Physics approximates a flat table; jump shots, masse, swerve, and spin-induced object-ball throw are not simulated.

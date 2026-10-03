@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
-  import { Physics, colors } from './physics';
+  import SpinControl from './SpinControl.svelte';
+  import { Physics, colors, type CueSpin } from './physics';
   import { draw } from './table';
   import { evaluate, inGroup, type Group } from './rules';
   import { chooseComputerShot, DIFFICULTIES, difficultyLevels, isDifficulty, type Difficulty, type ComputerShot } from './computer';
@@ -12,6 +13,7 @@
   let modal=$state<'help'|'new'|null>(null);
   let paused=$state(false), moving=$state(false), sound=$state(true), guide=$state(true), theme=$state('green');
   let angle=$state(0), power=$state(65), dragging=$state(false), placement=$state(false);
+  let spin=$state<CueSpin>({side:0,top:0});
   let shots=$state(0), sunk=$state<number[]>([]), elapsed=$state(0), player=$state(0);
   let groups=$state<(Group|null)[]>([null,null]), winner=$state<string|null>(null);
   let message=$state('The table is yours. Make your opening break.');
@@ -40,10 +42,11 @@
     }
     mode=next;physics.rack();shots=0;sunk=[];elapsed=0;timer=0;moving=false;dragging=false;placement=false;paused=false;winner=null;player=0;groups=[null,null];angle=0;power=65;modal=null;accumulator=0;
     computerPlan=null;computerDelay=0;
+    spin={side:0,top:0};
     message=next==='practice'?'The table is yours. Make your opening break.':next==='computer'?'You break. The computer is ready when you are.':'Player 1 to break. The table is open.';
   }
   function shoot(){if(!active||placement||physics.balls[0].sunk)return;startShot();}
-  function startShot(){initAudio();physics.shoot(angle,Math.max(80,power*12));tickSound(power/100);shots++;moving=true;dragging=false;accumulator=0;shotStart=performance.now();message=computerTurn?'Computer takes the shot. Let the table settle.':'A little patience. Let the table settle.';}
+  function startShot(){initAudio();physics.shoot(angle,Math.max(80,power*12),computerTurn?{side:0,top:0}:spin);tickSound(power/100);shots++;moving=true;dragging=false;accumulator=0;shotStart=performance.now();message=computerTurn?'Computer takes the shot. Let the table settle.':'A little patience. Let the table settle.';}
   function updateComputer(dt:number){
     if(mode!=='computer'||player!==1||moving)return;
     if(!computerPlan){
@@ -59,6 +62,7 @@
   function ballInHand(){placement=true;physics.balls[0].sunk=false;for(let x=310;x<1000;x+=25)if(physics.place(x,310))break;}
   function finishShot(){
     moving=false;
+    spin={side:0,top:0};
     const shot=physics.shot;
     if(mode!=='practice'){
       const result=evaluate(shot,physics.balls,groups[player],shots===1);
@@ -137,6 +141,7 @@
         </div>
         <div class="table-message" aria-live="polite"><span class="message-dot"></span>{message}<span class="key-hint">{computerTurn?'COMPUTER’S TURN':placement?'CLICK TO PLACE':dragging?'RELEASE TO SHOOT':'AIM · PULL BACK · RELEASE'}</span></div>
         <div class="controls"><div class="aim-help"><Icon name="mouse" size={25}/><div><strong>{computerTurn?'A worthy opponent.':'Your next great shot.'}</strong><span>{computerTurn?'Watch the computer find its angle.':'Point to aim. Drag back to power up.'}</span></div></div><div class="power-control"><label for="power">SHOT POWER <span>{Math.round(power)}%</span></label><input id="power" type="range" min="5" max="100" bind:value={power} disabled={!active||placement} style={`--power:${power}%`}/></div><button class="shoot-button" disabled={!active||placement} onclick={shoot}>{computerTurn?'Computer’s turn':'Take shot'} <Icon name="arrow" size={17}/></button><button class="icon-button pause-button" aria-label={paused?'Resume game':'Pause game'} title={paused?'Resume':'Pause'} disabled={!!winner} onclick={()=>{paused=!paused;dragging=false;}}><Icon name={paused?'play':'pause'} size={18}/></button></div>
+        <SpinControl bind:value={spin} disabled={!active||placement||dragging}/>
       </section>
 
       <aside>
@@ -156,7 +161,7 @@
     <dialog class="modal" use:openDialog oncancel={(e)=>{e.preventDefault();modal=null;}} aria-label={modal==='help'?'How to play':'Start a new game'}>
       <button class="icon-button modal-close" aria-label="Close dialog" onclick={()=>modal=null}><Icon name="close"/></button>
       <span class="eyebrow">WELCOME TO THE CLUB</span><h2>{modal==='help'?'Find your angle.':'A fresh start.'}</h2>
-      {#if modal==='help'}<p>A good game is only a few shots away.</p><div class="help-step"><b>01</b><div><strong>Line it up</strong><p>Move your pointer over the table to aim. The dotted line previews your cue ball’s first contact.</p></div></div><div class="help-step"><b>02</b><div><strong>Make your move</strong><p>Press on the table, drag back to set power, and release. Or adjust the power slider and choose Take shot.</p></div></div><div class="help-step"><b>03</b><div><strong>Play your way</strong><p>Practice: clear all 15 balls in as few shots as possible. Play a friend or the computer: pocket your group, then the eight. A legal pot keeps your turn; a foul gives your opponent ball in hand. You break against the computer; it aims and shoots automatically on its turn.</p></div></div><div class="rules-note">Club rules: groups are assigned after the break. Hit your group first and pocket a ball or reach a cushion. Early eight loses; an eight on the break is re-spotted. No called pockets.</div><div class="keyboard-help"><span><kbd>←</kbd><kbd>→</kbd> Aim</span><span><kbd>↑</kbd><kbd>↓</kbd> Power</span><span><kbd>Space</kbd> Shoot</span><span><kbd>Esc</kbd> Pause</span></div><p class="access-note">Hold Shift for fine aim. With ball in hand, use arrows to position and Space to place.</p><button class="primary-button full" onclick={()=>modal=null}>Got it. Let's play.<Icon name="arrow" size={18}/></button>
+      {#if modal==='help'}<p>A good game is only a few shots away.</p><div class="help-step"><b>01</b><div><strong>Line it up</strong><p>Move your pointer over the table to aim. The dotted line previews your cue ball’s first contact.</p></div></div><div class="help-step"><b>02</b><div><strong>Make your move</strong><p>Press on the table, drag back to set power, and release. Or adjust the power slider and choose Take shot.</p></div></div><div class="help-step"><b>03</b><div><strong>Play your way</strong><p>Practice: clear all 15 balls in as few shots as possible. Play a friend or the computer: pocket your group, then the eight. A legal pot keeps your turn; a foul gives your opponent ball in hand. You break against the computer; it aims and shoots automatically on its turn.</p></div></div><div class="help-step"><b>04</b><div><strong>Give it some spin</strong><p>Drag the red dot on the cue-ball target before shooting. Top follows the object ball; bottom draws the cue ball back. Left and right change cushion rebounds. Use the sliders or arrow keys on the target for fine control. Spin resets after each shot; the aim guide shows first contact only.</p></div></div><div class="rules-note">Club rules: groups are assigned after the break. Hit your group first and pocket a ball or reach a cushion. Early eight loses; an eight on the break is re-spotted. No called pockets.</div><div class="keyboard-help"><span><kbd>←</kbd><kbd>→</kbd> Aim</span><span><kbd>↑</kbd><kbd>↓</kbd> Power</span><span><kbd>Space</kbd> Shoot</span><span><kbd>Esc</kbd> Pause</span></div><p class="access-note">Hold Shift for fine aim. With ball in hand, use arrows to position and Space to place.</p><button class="primary-button full" onclick={()=>modal=null}>Got it. Let's play.<Icon name="arrow" size={18}/></button>
       {:else}<p>{shots?'Starting a new game will reset this table.':'The felt is fresh. The night is young.'}</p><button class="new-mode" onclick={()=>newGame('practice')}><Icon name="target" size={26}/><span><strong>Solo practice</strong><small>Clear the table. Beat your personal best.</small></span><Icon name="arrow"/></button><button class="new-mode" onclick={()=>newGame('versus')}><span class="players-icon">Ⅱ</span><span><strong>Local two-player</strong><small>Classic eight-ball with a friend on this device.</small></span><Icon name="arrow"/></button><fieldset class="difficulty-picker"><legend>Computer difficulty</legend><div class="difficulty-options">{#each difficultyLevels as level}<label><input type="radio" name="difficulty" value={level} bind:group={selectedDifficulty}/><span>{DIFFICULTIES[level].label}</span></label>{/each}</div><p aria-live="polite">{DIFFICULTIES[selectedDifficulty].description}</p></fieldset><button class="new-mode" onclick={()=>newGame('computer',selectedDifficulty)}><Icon name="computer" size={26}/><span><strong>Vs computer</strong><small>{DIFFICULTIES[selectedDifficulty].label} opponent. You make the opening break.</small></span><Icon name="arrow"/></button><button class="text-button" onclick={()=>modal=null}>Keep my current table</button>{/if}
     </dialog>
   </div>
