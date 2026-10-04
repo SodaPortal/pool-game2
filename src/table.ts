@@ -1,6 +1,6 @@
 import { Physics, R, pockets, colors, bounds } from './physics';
-import type {PlacementPreview} from './online-match';
-export interface View {angle:number;power:number;aim:boolean;dragging:boolean;guide:boolean;placement:boolean;theme:string;cuePreview?:PlacementPreview|null;}
+import type {PlacementPreview,AimPreview} from './online-match';
+export interface View {angle:number;power:number;aim:boolean;dragging:boolean;guide:boolean;placement:boolean;theme:string;cuePreview?:PlacementPreview|null;opponentAim?:AimPreview|null;}
 export function draw(ctx:CanvasRenderingContext2D, physics:Physics, v:View){
   const c=ctx; c.clearRect(0,0,1100,620);
   function rect(x:number,y:number,w:number,h:number,r:number,fill:string){c.beginPath();c.roundRect(x,y,w,h,r);c.fillStyle=fill;c.fill();}
@@ -21,7 +21,7 @@ export function draw(ctx:CanvasRenderingContext2D, physics:Physics, v:View){
   for(const p of pockets){c.shadowColor='#000';c.shadowBlur=10;c.beginPath();c.arc(p.x,p.y,25,0,Math.PI*2);c.fillStyle='#0b100f';c.fill();c.shadowBlur=0;c.strokeStyle='#87907855';c.lineWidth=3;c.stroke();c.beginPath();c.arc(p.x,p.y+3,18,0,Math.PI*2);c.fillStyle='#040807';c.fill();}
   c.fillStyle='#afba9380';for(const x of [190,310,430,670,790,910])for(const y of [36,584]){c.save();c.translate(x,y);c.rotate(Math.PI/4);c.fillRect(-2,-2,4,4);c.restore();}for(const x of [36,1064])for(const y of [190,310,430]){c.save();c.translate(x,y);c.rotate(Math.PI/4);c.fillRect(-2,-2,4,4);c.restore();}
   c.save();c.translate(550,438);c.fillStyle='#b8ddc31a';c.textAlign='center';c.font='500 12px sans-serif';c.letterSpacing='5px';c.fillText('AFTER HOURS',0,0);c.letterSpacing='2px';c.font='9px sans-serif';c.fillText('THE POOL CLUB',0,18);c.restore();
-  const cue=physics.balls[0],ux=Math.cos(v.angle),uy=Math.sin(v.angle);
+  const cue=v.opponentAim?{...physics.balls[0],x:v.opponentAim.x,y:v.opponentAim.y}:physics.balls[0],ux=Math.cos(v.angle),uy=Math.sin(v.angle);
   if(v.aim&&!cue.sunk&&!v.placement){
     if(v.guide){
       let distance=1200, target:typeof cue|undefined;

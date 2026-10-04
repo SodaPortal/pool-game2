@@ -32,7 +32,7 @@ export function roomHandler(injected?:RoomStore){return async(request:Request):P
     }
     const ip=hash(request.headers.get('x-vercel-forwarded-for')??request.headers.get('x-forwarded-for')??'local').slice(0,24);
     const action=request.method==='GET'?'read':body.action;
-    if(!['read','create','join','shot','leave','rematch','placement'].includes(action))fail(400,'Unknown room action.');
+    if(!['read','create','join','shot','leave','rematch','placement','aim'].includes(action))fail(400,'Unknown room action.');
     if(action==='create'||action==='join')if(!await store.limit(`${ip}:${action}`,action==='create'?12:60,3600))fail(429,'Too many room requests. Please try again later.');
     if(action==='create'){
       for(let attempt=0;attempt<4;attempt++){
@@ -54,6 +54,18 @@ export function roomHandler(injected?:RoomStore){return async(request:Request):P
       if(seat<0)fail(403,'This session does not belong to the room.');
       if(action==='read')return json(await view(store,current,seat));
       if(current.closed)fail(410,'This table is closed.');
+      if(action==='aim'){
+        if(current.match.player!==seat)fail(403,'It is your opponent’s turn.');
+        if(!current.tokens[1]||current.match.winner!==null||current.availableAt>Date.now()||body.revision!==current.revision)fail(409,'The table is not ready for aiming.');
+        if(typeof body.dragging!=='boolean'||!Number.isSafeInteger(body.sequence)||body.sequence<0)fail(400,'Invalid aim preview.');
+        let command,position;
+        try{
+          command=validateCommand({angle:body.angle,power:body.power,spin:{side:0,top:0}});
+          position=current.match.placement?validatePlacement(current.match.balls,body.position):current.match.balls[0];
+        }catch(e){fail(400,(e as Error).message);}
+        await store.preview(code,current.revision,{x:position!.x,y:position!.y,confirmed:true,sequence:body.sequence,aim:{angle:command!.angle,power:command!.power,dragging:body.dragging}});
+        return json({ok:true});
+      }
       if(action==='placement'){
         if(current.match.player!==seat)fail(403,'It is your opponent’s turn.');
         if(!current.match.placement||current.match.winner!==null||current.availableAt>Date.now()||body.revision!==current.revision)fail(409,'The table is not waiting for cue-ball placement.');
@@ -89,6 +101,7 @@ export function roomHandler(injected?:RoomStore){return async(request:Request):P
 };}
 async function view(store:RoomStore,room:RoomRecord,seat:number):Promise<RoomView>{
   const now=Date.now();
-  const [opponentOnline,placementPreview]=await Promise.all([store.presence(room.code,seat,now),!room.closed&&room.match.placement&&room.availableAt<=now?store.preview(room.code,room.revision):Promise.resolve(null)]);
-  return {code:room.code,revision:room.revision,seat,ready:!!room.tokens[1],closed:room.closed,match:room.match,replay:room.replay,availableAt:room.availableAt,serverNow:now,opponentOnline,placementPreview,rematchVotes:room.rematchVotes,expiresAt:room.expiresAt};
+  const [opponentOnline,preview]=await Promise.all([store.presence(room.code,seat,now),!room.closed&&room.match.winner===null&&room.availableAt<=now?store.preview(room.code,room.revision):Promise.resolve(null)]);
+  const aimPreview=preview?.aim?{...preview.aim,x:preview.x,y:preview.y,sequence:preview.sequence}:null;
+  return {code:room.code,revision:room.revision,seat,ready:!!room.tokens[1],closed:room.closed,match:room.match,replay:room.replay,availableAt:room.availableAt,serverNow:now,opponentOnline,placementPreview:room.match.placement?preview:null,aimPreview,rematchVotes:room.rematchVotes,expiresAt:room.expiresAt};
 }

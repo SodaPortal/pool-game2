@@ -29,7 +29,12 @@
   const onlineBlocked=$derived(mode==='online'&&(!room||!room.ready||room.closed||!roomConnected||roomBusy||room.seat!==player));
   const opponentPlacement=$derived(mode==='online'&&!moving&&!!room?.match.placement&&room.match.player!==room.seat&&!room.closed);
   const cuePreview=$derived(opponentPlacement?room?.placementPreview:null);
+  const watchingOpponent=$derived(mode==='online'&&!!room&&room.seat!==room.match.player);
+  const opponentAim=$derived(watchingOpponent&&!moving&&!winner&&!room?.closed?room?.aimPreview:null);
   const active=$derived(!moving&&!paused&&!modal&&!winner&&!computerTurn&&!onlineBlocked);
+  $effect(()=>{
+    if(mode==='online'&&room&&active&&!placement)network?.previewAim(angle,power,dragging,{x:physics.balls[0].x,y:physics.balls[0].y});
+  });
   function playerName(index:number){return mode==='online'?(index===room?.seat?'You':'Opponent'):mode==='computer'?(index===0?'You':'Computer'):`Player ${index+1}`;}
   const potted=$derived(sunk.filter(n=>n>0).length);
   const time=$derived(`${Math.floor(elapsed/60).toString().padStart(2,'0')}:${(elapsed%60).toString().padStart(2,'0')}`);
@@ -161,7 +166,7 @@
     function loop(now:number){const dt=oldTime?Math.min((now-oldTime)/1000,.05):0;oldTime=now;
       if(mode==='online'){onlineTick();if(room?.ready&&!winner&&!room.closed){timer+=dt;elapsed=Math.floor(timer);}}
       else if(!paused&&!modal&&!winner){if(shots){timer+=dt;elapsed=Math.floor(timer);}if(moving){accumulator+=dt;while(accumulator>=1/240){physics.step(1/240);accumulator-=1/240;}if(!physics.moving&&now-shotStart>100)finishShot();}else updateComputer(dt);}
-      context.setTransform(canvas.width/1100,0,0,canvas.height/620,0,0);draw(context,physics,{angle,power,aim:!moving&&!winner&&!opponentPlacement,dragging,guide,placement,theme,cuePreview});frame=requestAnimationFrame(loop);
+      context.setTransform(canvas.width/1100,0,0,canvas.height/620,0,0);draw(context,physics,{angle:opponentAim?.angle??angle,power:opponentAim?.power??power,aim:watchingOpponent?!!opponentAim:!moving&&!winner,dragging:opponentAim?.dragging??dragging,guide:guide&&!watchingOpponent,placement,theme,cuePreview,opponentAim});frame=requestAnimationFrame(loop);
     }
     frame=requestAnimationFrame(loop);const change=()=>fullscreen=!!document.fullscreenElement;
     const visibility=()=>{if(mode==='online'){if(!document.hidden)void network?.poll();return;}if(document.hidden&&shots&&!winner){paused=true;dragging=false;}};

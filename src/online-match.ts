@@ -12,12 +12,14 @@ export interface MatchState {
 }
 export interface ShotCommand { angle:number; power:number; spin:CueSpin; position?:{x:number;y:number} }
 export interface ShotReplay { id:string; actor:number; before:Ball[]; command:ShotCommand; startsAt:number; duration:number }
-export interface PlacementPreview {x:number;y:number;confirmed:boolean;sequence:number}
+export interface AimPreview {x:number;y:number;angle:number;power:number;dragging:boolean;sequence:number}
+export interface PlacementPreview {x:number;y:number;confirmed:boolean;sequence:number;aim?:Pick<AimPreview,'angle'|'power'|'dragging'>}
 export interface RoomView {
   code:string; revision:number; seat:number; ready:boolean; closed:boolean;
   match:MatchState; replay:ShotReplay|null; availableAt:number; serverNow:number;
   opponentOnline:boolean; rematchVotes:number[]; expiresAt:number;
   placementPreview?:PlacementPreview|null;
+  aimPreview?:AimPreview|null;
 }
 export function validatePlacement(balls:Ball[],value:unknown):{x:number;y:number}{
   const at=value as {x:number;y:number};

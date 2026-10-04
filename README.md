@@ -34,6 +34,8 @@ Choose **Play online → Create room**, then **Copy invite** and send the link t
 
 During ball in hand, the waiting player sees the opponent's cue-ball position update as they move it, with a dashed placement ring. Clicking or pressing Space confirms the location and changes the ring to solid. The preview clears when the shot begins; it does not change the table's official state until the shot is submitted.
 
+You can also see your opponent's cue stick rotate as they aim and pull back as they drag to set power. Pointer and keyboard aiming are shared, including shots lined up from a newly placed cue ball. The stick disappears during the shot.
+
 Refreshing restores your seat in the same browser; a temporary connection loss reconnects automatically. Keep the same browser profile and its site storage to retain your seat. **Leave room** closes the table for both players. Rooms expire after 24 hours without a game action. These are private two-player rooms; there is no public matchmaking or spectator mode.
 
 The server validates and simulates each shot, then clients animate it and settle onto the authoritative result. Turn-based polling works with Vercel Functions without a separate WebSocket server. Online games continue when a tab is hidden and catch up when you return.

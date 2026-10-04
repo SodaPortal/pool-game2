@@ -13,6 +13,21 @@ test('two independent players join by invite, exchange shots, and restore a seat
     await expect(host.locator('.room-status')).toHaveText('Both players connected',{timeout:10000});
     await expect(guest.getByRole('button',{name:'Waiting for friend',exact:true})).toBeDisabled();
     await third.goto(`/?room=${code}`);await expect(third.getByRole('alert')).toContainText('already has two players');
+    const stickAt=(page:typeof host,x:number,y:number)=>page.locator('canvas').evaluate((canvas:HTMLCanvasElement,at)=>{
+      const pixel=canvas.getContext('2d')!.getImageData(Math.round(canvas.width*at.x/1100),Math.round(canvas.height*at.y/620),1,1).data;
+      return pixel[0]>110&&pixel[0]>pixel[1]*1.07&&pixel[1]>pixel[2]*1.08;
+    },{x,y});
+    const hostPoint=async(x:number,y:number)=>{const table=(await host.locator('canvas').boundingBox())!;return {x:table.x+table.width*x/1100,y:table.y+table.height*y/620};};
+    let at=await hostPoint(310,410);await host.mouse.move(at.x,at.y);
+    await expect.poll(()=>stickAt(guest,310,200),{timeout:10000}).toBe(true);
+    await host.locator('canvas').focus();await host.keyboard.press('ArrowRight');
+    await expect.poll(()=>stickAt(guest,310-Math.cos(Math.PI/2+.025)*110,310-Math.sin(Math.PI/2+.025)*110),{timeout:10000}).toBe(true);
+    // A held drag pulls the remote stick away from the ball, before any shot is fired.
+    at=await hostPoint(310,410);await host.mouse.move(at.x,at.y);await host.mouse.down();at=await hostPoint(310,550);await host.mouse.move(at.x,at.y);
+    await expect.poll(()=>stickAt(guest,310,260),{timeout:10000}).toBe(false);
+    await expect.poll(()=>stickAt(guest,310,150),{timeout:10000}).toBe(true);
+    await host.keyboard.press('Escape');await host.mouse.up();at=await hostPoint(410,310);await host.mouse.move(at.x,at.y);
+    await expect.poll(()=>stickAt(guest,200,310),{timeout:10000}).toBe(true);
     await host.locator('#top-spin').fill('-40');await host.locator('#power').fill('5');await host.getByRole('button',{name:'Take shot',exact:true}).click();
     await expect(guest.locator('.shot-count strong')).toHaveText('02',{timeout:10000});
     await expect(guest.locator('.table-message')).toContainText('place the cue ball',{timeout:10000});
@@ -27,6 +42,9 @@ test('two independent players join by invite, exchange shots, and restore a seat
     await expect.poll(remoteCue,{timeout:10000}).toBe(true);
     await guest.locator('canvas').focus();await guest.keyboard.press('ArrowRight');await guest.keyboard.press('Space');
     await expect(host.locator('.table-message')).toContainText('Opponent placed the cue ball',{timeout:10000});
+    const placedTable=(await guest.locator('canvas').boundingBox())!;
+    await guest.mouse.move(placedTable.x+placedTable.width*450/1100,placedTable.y+placedTable.height*348/620);
+    await expect.poll(()=>stickAt(host,450,138),{timeout:10000}).toBe(true);
     await guest.locator('#power').fill('5');await guest.getByRole('button',{name:'Take shot',exact:true}).click();
     await expect(host.locator('.shot-count strong')).toHaveText('03',{timeout:10000});
     await expect(host.locator('.table-message')).toContainText('place the cue ball',{timeout:10000});
