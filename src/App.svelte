@@ -3,6 +3,7 @@
   import Icon from './Icon.svelte';
   import SpinControl from './SpinControl.svelte';
   import MobileControls from './MobileControls.svelte';
+  import {fullTable,clampCamera,tablePoint,type Camera} from './table-camera';
   import { Physics, colors, type CueSpin } from './physics';
   import { draw } from './table';
   import { evaluate, inGroup, type Group } from './rules';
@@ -14,6 +15,8 @@
   let canvas:HTMLCanvasElement;
   let stage:HTMLDivElement;
   let mobile=$state(false),portrait=$state(false),touchPointer:number|null=null;
+  let camera=$state<Camera>({...fullTable}),panView=$state(false);
+  let panStart:{point:{x:number;y:number};camera:Camera}|null=null;
   let mode=$state<'practice'|'versus'|'computer'|'online'>('practice');
   let difficulty=$state<Difficulty>('medium'), selectedDifficulty=$state<Difficulty>('medium');
   let modal=$state<'help'|'new'|'online'|'menu'|'spin'|null>(null);
@@ -37,6 +40,7 @@
   const opponentAim=$derived(watchingOpponent&&!moving&&!winner&&!room?.closed?room?.aimPreview:null);
   const canAct=$derived(!moving&&!paused&&!winner&&!computerTurn&&!onlineBlocked);
   const active=$derived(canAct&&!modal);
+  $effect(()=>{if(moving||!mobile){camera={...fullTable};panView=false;cancelPointer();}});
   $effect(()=>{
     if(mode==='online'&&room&&active&&!placement)network?.previewAim(angle,power,dragging,{x:physics.balls[0].x,y:physics.balls[0].y});
   });
@@ -56,6 +60,7 @@
   function newGame(next=mode,level=difficulty){
     if(next==='online'){void requestRematch();return;}
     if(room||network)closeRoom();
+    camera={...fullTable};panView=false;
     if(next==='computer'){
       difficulty=level;selectedDifficulty=level;
       try{localStorage.setItem('after-hours-difficulty',level);}catch{}
@@ -142,13 +147,20 @@
     sunk=physics.balls.filter(b=>b.sunk&&b.id>0).map(b=>b.id);
     if(mode==='practice'&&sunk.length===15){winner='Table cleared';message=`All fifteen, in ${shots} shots. That deserves another round.`;if(!best||shots<best){best=shots;try{localStorage.setItem('after-hours-best',String(best));}catch{}}}
   }
-  function point(e:PointerEvent){const r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;return mobile&&portrait?{x:(1-y)*1100,y:x*620}:{x:x*1100,y:y*620};}
+  function point(e:PointerEvent,view=mobile?camera:fullTable){const r=canvas.getBoundingClientRect();return tablePoint((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height,mobile&&portrait,view);}
+  function zoomTable(){
+    cancelPointer();
+    if(camera.zoom>1){camera={...fullTable};panView=false;return;}
+    const cue=physics.balls[0],ux=Math.cos(angle),uy=Math.sin(angle);let focus=cue,nearest=Infinity;
+    if(!placement)for(const ball of physics.balls){const dx=ball.x-cue.x,dy=ball.y-cue.y,along=dx*ux+dy*uy;if(ball.id&&!ball.sunk&&along>0&&along<nearest&&Math.abs(dx*uy-dy*ux)<22){focus=ball;nearest=along;}}
+    camera=clampCamera({x:focus.x,y:focus.y,zoom:2});panView=false;
+  }
   function confirmPlacement(){if(!active||!placement)return;try{validatePlacement(physics.balls,physics.balls[0]);}catch{message='Choose clear felt, away from the pockets.';return;}previewPlacement(true);placement=false;message='Cue ball placed. Line up your shot.';}
-  function cancelPointer(){touchPointer=null;dragging=false;}
+  function cancelPointer(){touchPointer=null;panStart=null;dragging=false;}
   function previewPlacement(confirmed=false){if(mode==='online')network?.previewPlacement({x:physics.balls[0].x,y:physics.balls[0].y},confirmed);}
-  function pointerMove(e:PointerEvent){if(!active||(mobile&&touchPointer!==e.pointerId))return;const p=point(e);if(placement){if(physics.place(p.x,p.y))previewPlacement();return;}if(dragging){dragDistance=Math.hypot(p.x-dragStart.x,p.y-dragStart.y);power=Math.min(100,Math.round(dragDistance/1.6));}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);}
-  function pointerDown(e:PointerEvent){if(!active||e.button!==0)return;const p=point(e);canvas.focus({preventScroll:true});if(mobile){if(touchPointer!==null)return;touchPointer=e.pointerId;canvas.setPointerCapture(e.pointerId);if(placement){if(physics.place(p.x,p.y))previewPlacement();}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);return;}if(placement){if(physics.place(p.x,p.y)){previewPlacement(true);placement=false;message='Cue ball placed. Line up your shot.';}return;}initAudio();angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);dragStart=p;dragDistance=0;dragging=true;canvas.setPointerCapture(e.pointerId);}
-  function pointerUp(e:PointerEvent){if(mobile){if(touchPointer===e.pointerId)touchPointer=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);return;}if(!dragging)return;dragging=false;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);if(dragDistance>8)shoot();else power=65;}
+  function pointerMove(e:PointerEvent){if(mobile&&touchPointer!==e.pointerId)return;if(mobile&&panStart){const at=point(e,fullTable);camera=clampCamera({...panStart.camera,x:panStart.camera.x-(at.x-panStart.point.x)/camera.zoom,y:panStart.camera.y-(at.y-panStart.point.y)/camera.zoom});return;}if(!active)return;const p=point(e);if(placement){if(physics.place(p.x,p.y))previewPlacement();return;}if(dragging){dragDistance=Math.hypot(p.x-dragStart.x,p.y-dragStart.y);power=Math.min(100,Math.round(dragDistance/1.6));}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);}
+  function pointerDown(e:PointerEvent){if(e.button!==0)return;if(mobile&&panView&&camera.zoom>1&&!paused&&!winner&&!modal){if(touchPointer!==null)return;touchPointer=e.pointerId;canvas.setPointerCapture(e.pointerId);panStart={point:point(e,fullTable),camera:{...camera}};return;}if(!active)return;const p=point(e);canvas.focus({preventScroll:true});if(mobile){if(touchPointer!==null)return;touchPointer=e.pointerId;canvas.setPointerCapture(e.pointerId);if(placement){if(physics.place(p.x,p.y))previewPlacement();}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);return;}if(placement){if(physics.place(p.x,p.y)){previewPlacement(true);placement=false;message='Cue ball placed. Line up your shot.';}return;}initAudio();angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);dragStart=p;dragDistance=0;dragging=true;canvas.setPointerCapture(e.pointerId);}
+  function pointerUp(e:PointerEvent){if(mobile){if(touchPointer===e.pointerId){touchPointer=null;panStart=null;}if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);return;}if(!dragging)return;dragging=false;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);if(dragDistance>8)shoot();else power=65;}
   function keydown(e:KeyboardEvent){
     if(e.key==='Escape'){if(modal)modal=null;else if(mode!=='online')paused=!paused;dragging=false;return;}
     if((e.target as HTMLElement)?.matches('input,select,button'))return;
@@ -181,8 +193,10 @@
     function loop(now:number){const dt=oldTime?Math.min((now-oldTime)/1000,.05):0;oldTime=now;
       if(mode==='online'){onlineTick();if(room?.ready&&!winner&&!room.closed){timer+=dt;elapsed=Math.floor(timer);}}
       else if(!paused&&!modal&&!winner){if(shots){timer+=dt;elapsed=Math.floor(timer);}if(moving){accumulator+=dt;while(accumulator>=1/240){physics.step(1/240);accumulator-=1/240;}if(!physics.moving&&now-shotStart>100)finishShot();}else updateComputer(dt);}
+      context.setTransform(1,0,0,1,0,0);context.clearRect(0,0,canvas.width,canvas.height);
       if(mobile&&portrait)context.setTransform(0,-canvas.height/1100,canvas.width/620,0,0,canvas.height);else context.setTransform(canvas.width/1100,0,0,canvas.height/620,0,0);
-      draw(context,physics,{angle:opponentAim?.angle??angle,power:opponentAim?.power??power,aim:watchingOpponent?!!opponentAim:!moving&&!winner,dragging:opponentAim?.dragging??dragging,guide:guide&&!watchingOpponent,placement,theme,cuePreview,opponentAim});frame=requestAnimationFrame(loop);
+      if(mobile){context.translate(550,310);context.scale(camera.zoom,camera.zoom);context.translate(-camera.x,-camera.y);}
+      draw(context,physics,{angle:opponentAim?.angle??angle,power:opponentAim?.power??power,aim:watchingOpponent?!!opponentAim:!moving&&!winner,dragging:opponentAim?.dragging??dragging,guide:guide&&!watchingOpponent,placement,theme,cuePreview,opponentAim,mobile,portrait:mobile&&portrait});frame=requestAnimationFrame(loop);
     }
     frame=requestAnimationFrame(loop);const change=()=>fullscreen=!!document.fullscreenElement;
     const visibility=()=>{if(mode==='online'){if(!document.hidden)void network?.poll();return;}if(document.hidden&&shots&&!winner){paused=true;dragging=false;}};
@@ -213,12 +227,13 @@
 
         <div class="table-stage" bind:this={stage}>
           <div class="table-glow"></div>
+          {#if mobile&&!paused&&!winner}<div class="table-view-controls"><button onclick={zoomTable} disabled={moving} aria-label={camera.zoom>1?'Show full table':'Zoom in on balls'} aria-pressed={camera.zoom>1}>{camera.zoom>1?'Full table':'Zoom 2x'}</button>{#if camera.zoom>1}<button aria-label={panView?'Resume aiming':'Move zoomed view'} aria-pressed={panView} onclick={()=>{cancelPointer();panView=!panView;}}>{panView?'Resume aiming':'Move view'}</button><span>{panView?'Drag to look around':'2x - touch to aim'}</span>{/if}</div>{/if}
           <canvas bind:this={canvas} aria-label={mobile?"Pool table. Touch and slide to aim. Use Fine aim for precision, then Take shot. With ball in hand, touch to position, then Place cue ball.":"Pool table. Aim with the pointer, drag backward and release to shoot. Keyboard: left and right to aim, up and down for power, space to shoot."} tabindex="0" onpointermove={pointerMove} onpointerdown={pointerDown} onpointerup={pointerUp} onpointercancel={cancelPointer} onlostpointercapture={cancelPointer}>Your browser needs canvas support to play pool.</canvas>
           {#if paused||winner}<div class="table-overlay"><div><span class="eyebrow">{winner?'WELL PLAYED':'TAKE YOUR TIME'}</span><h2>{winner??'A little breather.'}</h2><p>{winner?message:'Your table will be right here.'}</p><button class="primary-button" disabled={mode==='online'&&(roomBusy||!!room?.closed||!!room?.rematchVotes.includes(room?.seat))} onclick={()=>winner?newGame():paused=false}>{winner?(mode==='online'?(room?.rematchVotes.includes(room?.seat)?'Waiting for your friend':'Request rematch'):'Play another round'):'Back to the table'}<Icon name="arrow" size={18}/></button></div></div>{/if}
         </div>
         <div class="table-message" aria-live="polite"><span class="message-dot"></span>{opponentPlacement?(cuePreview?.confirmed?"Opponent placed the cue ball. Lining up a shot.":"Opponent is choosing a cue-ball position."):mobile&&shots===0&&mode==='practice'?"Touch the table to aim. Set power, then Take shot.":message}<span class="key-hint">{mode==='online'&&onlineBlocked?'ONLINE TABLE':computerTurn?'COMPUTER’S TURN':placement?'CLICK TO PLACE':dragging?'RELEASE TO SHOOT':'AIM · PULL BACK · RELEASE'}</span></div>
         {#if mobile}
-          <MobileControls bind:angle bind:power disabled={!active} {placement} label={moving?'Balls rolling':computerTurn?'Computer?s turn':mode==='online'&&roomBusy?'Sending shot':onlineBlocked?'Waiting for friend':'Take shot'} spinActive={Math.hypot(spin.side,spin.top)>.01} online={mode==='online'} {paused} onshoot={()=>placement?confirmPlacement():shoot()} onspin={()=>modal='spin'} ononline={()=>{roomError='';modal='online';}} onpause={()=>{paused=!paused;cancelPointer();}}/>
+          <MobileControls bind:angle bind:power disabled={!active} {placement} label={moving?'Balls rolling':computerTurn?'Computer turn':mode==='online'&&roomBusy?'Sending shot':onlineBlocked?'Waiting for friend':'Take shot'} spinActive={Math.hypot(spin.side,spin.top)>.01} online={mode==='online'} {paused} onshoot={()=>placement?confirmPlacement():shoot()} onspin={()=>modal='spin'} ononline={()=>{roomError='';modal='online';}} onpause={()=>{paused=!paused;cancelPointer();}}/>
         {:else}
         <div class="controls"><div class="aim-help"><Icon name="mouse" size={25}/><div><strong>{computerTurn?'A worthy opponent.':'Your next great shot.'}</strong><span>{computerTurn?'Watch the computer find its angle.':'Point to aim. Drag back to power up.'}</span></div></div><div class="power-control"><label for="power">SHOT POWER <span>{Math.round(power)}%</span></label><input id="power" type="range" min="5" max="100" bind:value={power} disabled={!active||placement} style={`--power:${power}%`}/></div><button class="shoot-button" disabled={!active||placement} onclick={shoot}>{computerTurn?'Computer’s turn':mode==='online'&&roomBusy?'Sending shot':mode==='online'&&onlineBlocked?'Waiting for friend':'Take shot'} <Icon name="arrow" size={17}/></button><button class="icon-button pause-button" aria-label={paused?'Resume game':'Pause game'} title={paused?'Resume':'Pause'} disabled={!!winner||mode==='online'} onclick={()=>{paused=!paused;dragging=false;}}><Icon name={paused?'play':'pause'} size={18}/></button></div>
         <SpinControl bind:value={spin} disabled={!active||placement||dragging}/>

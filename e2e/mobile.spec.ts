@@ -82,3 +82,34 @@ test('phone ball-in-hand uses touch preview and explicit placement in an online 
     await host.getByRole('button',{name:'Leave room',exact:true}).click();
   }finally{await desktop.close();await phone.close();}
 });
+
+
+test('phone zoom doubles visible ball size, preserves aiming, and pans without taking a shot',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:2});
+  try{
+    const page=await context.newPage(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/');await page.evaluate(()=>document.fonts.ready);
+    const ballWidth=(zoomed:boolean)=>page.locator('canvas').evaluate((c:HTMLCanvasElement,z)=>{
+      const y=Math.round(c.height*(1-(z?550:748)/1100)),x=Math.round(c.width/2),pixels=c.getContext('2d')!.getImageData(0,y,c.width,1).data;
+      const lit=[];for(let at=x-60;at<=x+60;at++)if(pixels[at*4]>160)lit.push(at);
+      return lit.length?lit[lit.length-1]-lit[0]+1:0;
+    },zoomed);
+    const before=await ballWidth(false);expect(before).toBeGreaterThan(5);
+    await page.getByRole('button',{name:'Zoom in on balls'}).tap();
+    await expect.poll(()=>ballWidth(true)).toBeGreaterThan(before*1.7);
+    expect(await ballWidth(true)).toBeLessThan(before*2.3);
+    await page.screenshot({path:'test-results/phone-zoom.png',fullPage:true});
+    const r=(await page.locator('canvas').boundingBox())!;
+    await page.touchscreen.tap(r.x+r.width*510/620,r.y+r.height*(1-654/1100));
+    const aim=Number(await page.getByRole('slider',{name:'Fine aim'}).getAttribute('aria-valuenow'));
+    expect(Math.abs(aim-Math.atan2(100,490)*180/Math.PI)).toBeLessThan(1);
+    await page.getByRole('button',{name:'Move zoomed view'}).tap();
+    const image=await page.locator('canvas').evaluate((c:HTMLCanvasElement)=>c.toDataURL());
+    await page.mouse.move(r.x+r.width*.5,r.y+r.height*.5);await page.mouse.down();await page.mouse.move(r.x+r.width*.7,r.y+r.height*.6,{steps:6});await page.mouse.up();
+    await expect.poll(()=>page.locator('canvas').evaluate((c:HTMLCanvasElement)=>c.toDataURL())).not.toBe(image);
+    await expect(page.getByRole('slider',{name:'Fine aim'})).toHaveAttribute('aria-valuenow',String(aim));
+    await expect(page.locator('.shot-count strong')).toHaveText('01');
+    await page.getByRole('button',{name:'Resume aiming'}).tap();await page.getByRole('slider',{name:'Shot power'}).fill('5');await page.getByRole('button',{name:'Take shot',exact:true}).tap();
+    await expect(page.getByRole('button',{name:'Zoom in on balls'})).toBeVisible();await expect(page.locator('.shot-count strong')).toHaveText('02');
+    await fits(page);expect(errors).toEqual([]);
+  }finally{await context.close();}
+});

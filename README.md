@@ -33,6 +33,7 @@ On Windows PowerShell with restricted execution policies, use `npm.cmd` instead 
 Phones get a dedicated layout that keeps the table and shot controls on screen. The table turns upright in portrait; landscape puts the controls beside a wider table. Rotating your phone preserves the match.
 
 - Touch and slide on the table to aim. Releasing your finger never fires a shot.
+- Phone balls have brighter colors, stronger outlines, and larger upright numbers. Tap **Zoom 2x** for a closer view; **Move view** lets you drag around the table, and **Resume aiming** returns to shot control. **Full table** restores the overview. Taking a shot automatically returns to the full table so you can follow every ball.
 - Slide **Fine aim**, or tap its **− / +** buttons, for precise adjustments.
 - Set **Power**, then tap **Take shot**.
 - With ball in hand, touch or slide to position the ball, then tap **Place cue ball** to confirm. Your online opponent sees the preview.
