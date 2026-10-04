@@ -79,3 +79,30 @@ test('authoritative simulation includes cue spin and never changes the supplied 
   const draw=simulateShot(state,{angle:0,power:42,spin:{side:0,top:-1}}),follow=simulateShot(state,{angle:0,power:42,spin:{side:0,top:1}});
   assert.ok(draw.match.balls[0].x<follow.match.balls[0].x);assert.deepEqual(state,original);
 });
+test('placement previews validate ownership and position without changing the match or revision',async()=>{
+  const {call,host,guest,store}=setup();const {data:{code}}=await call(host,{action:'create'});await call(guest,{action:'join',code});
+  const record=(await store.get(code))!;
+  const preview={action:'placement',code,revision:record.revision,position:{x:400,y:250},confirmed:false,sequence:2};
+  assert.equal((await call(host,preview)).status,409);
+  record.match.placement=true;await store.save(code,record.revision,record);
+  assert.equal((await call(guest,preview)).status,403);
+  assert.equal((await call(randomUUID(),preview)).status,403);
+  for(const position of [{x:748,y:310},{x:81,y:81},{x:-100,y:250},{x:'400',y:250}])assert.equal((await call(host,{...preview,position})).status,400);
+  assert.equal((await call(host,{...preview,sequence:1.5})).status,400);
+  assert.equal((await call(host,{...preview,revision:0})).status,409);
+  assert.equal((await call(host,preview)).status,200);
+  const read=await call(guest,undefined,code);
+  assert.deepEqual(read.data.placementPreview,{x:400,y:250,confirmed:false,sequence:2});
+  assert.equal(read.data.revision,record.revision);assert.deepEqual(read.data.match,record.match);
+  await call(host,{...preview,position:{x:500,y:250},confirmed:true,sequence:3});
+  await call(host,{...preview,sequence:1});
+  assert.equal((await call(guest,undefined,code)).data.placementPreview.confirmed,true);
+  const shot=await call(host,{action:'shot',code,revision:record.revision,requestId:randomUUID(),command:{...command,position:{x:500,y:250}}});
+  assert.equal(shot.status,200);assert.equal(shot.data.placementPreview,null);
+  assert.equal((await call(host,preview)).status,403);
+  // Even if an old request finishes after the shot, its revision cannot leak into the new turn.
+  await store.preview(code,record.revision,{x:600,y:250,confirmed:false,sequence:4});
+  const latest=(await store.get(code))!;latest.availableAt=0;await store.save(code,latest.revision,latest);
+  assert.equal((await call(guest,undefined,code)).data.placementPreview,null);
+  await call(guest,{action:'leave',code});assert.equal((await call(host,undefined,code)).data.placementPreview,null);
+});

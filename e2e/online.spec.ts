@@ -16,7 +16,17 @@ test('two independent players join by invite, exchange shots, and restore a seat
     await host.locator('#top-spin').fill('-40');await host.locator('#power').fill('5');await host.getByRole('button',{name:'Take shot',exact:true}).click();
     await expect(guest.locator('.shot-count strong')).toHaveText('02',{timeout:10000});
     await expect(guest.locator('.table-message')).toContainText('place the cue ball',{timeout:10000});
-    const cue=await guest.locator('canvas').boundingBox();await guest.locator('canvas').click({position:{x:cue!.width*.3,y:cue!.height*.5}});
+    const cue=await guest.locator('canvas').boundingBox();
+    await guest.mouse.move(cue!.x+cue!.width*.4,cue!.y+cue!.height*.4);
+    await expect(host.locator('.table-message')).toContainText('Opponent is choosing a cue-ball position');
+    // Verify the remote canvas actually draws the white cue ball at the hovered position.
+    const remoteCue=()=>host.locator('canvas').evaluate((canvas:HTMLCanvasElement)=>{
+      const pixel=canvas.getContext('2d')!.getImageData(Math.round(canvas.width*.4),Math.round(canvas.height*.4),1,1).data;
+      return pixel[0]>180&&pixel[1]>180&&pixel[2]>150;
+    });
+    await expect.poll(remoteCue,{timeout:10000}).toBe(true);
+    await guest.locator('canvas').focus();await guest.keyboard.press('ArrowRight');await guest.keyboard.press('Space');
+    await expect(host.locator('.table-message')).toContainText('Opponent placed the cue ball',{timeout:10000});
     await guest.locator('#power').fill('5');await guest.getByRole('button',{name:'Take shot',exact:true}).click();
     await expect(host.locator('.shot-count strong')).toHaveText('03',{timeout:10000});
     await expect(host.locator('.table-message')).toContainText('place the cue ball',{timeout:10000});

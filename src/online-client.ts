@@ -9,18 +9,23 @@ export class RoomClient {
   private stopped=false;
   private failures=0;
   private controller=new AbortController();
+  private placementTimer:ReturnType<typeof setTimeout>|undefined;
+  private pendingPlacement:Record<string,unknown>|null=null;
+  private sendingPlacement=false;
+  private placementSequence=0;
   constructor(private update:(room:RoomView)=>void,private connection:(connected:boolean)=>void,private error:(message:string)=>void){}
-  private async request(body?:Record<string,unknown>):Promise<RoomView>{
+  private async request<T=RoomView>(body?:Record<string,unknown>):Promise<T>{
     const response=await fetch(`/api/room${body?'':`?code=${this.room!.code}`}`,{
       method:body?'POST':'GET',headers:{Authorization:`Bearer ${this.token}`,...(body?{'Content-Type':'application/json'}:{})},
       ...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([this.controller.signal,AbortSignal.timeout(12000)]),cache:'no-store'
     });
     const data=await response.json();
     if(!response.ok)throw new RoomError(data.error??'The room could not be reached.',response.status);
-    return data as RoomView;
+    return data as T;
   }
   private accept(room:RoomView){
     if(this.stopped||this.room&&room.revision<this.room.revision)return;
+    if(this.room?.revision===room.revision&&(this.room.placementPreview?.sequence??0)>(room.placementPreview?.sequence??0))room.placementPreview=this.room.placementPreview;
     this.offset=room.serverNow-Date.now();this.room=room;this.failures=0;this.connection(true);this.update(room);
   }
   async enter(code?:string){
@@ -34,7 +39,7 @@ export class RoomClient {
   }
   private schedule(){
     if(this.stopped||this.room?.closed)return;
-    const delay=this.failures?Math.min(10000,1000*2**this.failures):document.hidden?10000:!this.room?.ready?2000:this.room.match.player===this.room.seat?1600:800;
+    const delay=this.failures?Math.min(10000,1000*2**this.failures):document.hidden?10000:!this.room?.ready?2000:this.room.match.player===this.room.seat?1600:this.room.match.placement&&Date.now()+this.offset>=this.room.availableAt?250:800;
     this.timer=setTimeout(()=>void this.poll(),delay);
   }
   async poll(){
@@ -45,6 +50,7 @@ export class RoomClient {
   }
   async shot(command:ShotCommand){
     if(!this.room)throw new Error('Join a room first.');
+    this.pendingPlacement=null;clearTimeout(this.placementTimer);
     const body={action:'shot',code:this.room.code,revision:this.room.revision,requestId:crypto.randomUUID(),command};
     try{this.accept(await this.request(body));}
     catch(e){
@@ -53,10 +59,27 @@ export class RoomClient {
       else{await this.poll();throw e;}
     }
   }
+  previewPlacement(position:{x:number;y:number},confirmed=false){
+    if(this.stopped||!this.room||!this.room.match.placement||this.room.match.player!==this.room.seat)return;
+    this.placementSequence=Math.max(Date.now(),this.placementSequence+1);
+    this.pendingPlacement={action:'placement',code:this.room.code,revision:this.room.revision,position:{...position},confirmed,sequence:this.placementSequence};
+    if(!this.sendingPlacement&&!this.placementTimer)void this.flushPlacement();
+  }
+  private async flushPlacement(){
+    this.placementTimer=undefined;
+    const body=this.pendingPlacement;this.pendingPlacement=null;
+    if(this.stopped||!body||body.revision!==this.room?.revision)return;
+    this.sendingPlacement=true;
+    try{await this.request<{ok:boolean}>(body);}catch{/* A preview is best effort; the shot still submits the final position. */}
+    finally{
+      this.sendingPlacement=false;
+      if(!this.stopped)this.placementTimer=setTimeout(()=>void this.flushPlacement(),200);
+    }
+  }
   async rematch(){if(this.room)this.accept(await this.request({action:'rematch',code:this.room.code}));}
   leave(){
     if(this.room&&!this.room.closed)void fetch('/api/room',{method:'POST',headers:{Authorization:`Bearer ${this.token}`,'Content-Type':'application/json'},body:JSON.stringify({action:'leave',code:this.room.code}),keepalive:true}).catch(()=>{});
     this.stop();
   }
-  stop(){this.stopped=true;clearTimeout(this.timer);this.controller.abort();}
+  stop(){this.stopped=true;clearTimeout(this.timer);clearTimeout(this.placementTimer);this.pendingPlacement=null;this.controller.abort();}
 }

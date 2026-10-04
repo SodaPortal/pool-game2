@@ -12,10 +12,19 @@ export interface MatchState {
 }
 export interface ShotCommand { angle:number; power:number; spin:CueSpin; position?:{x:number;y:number} }
 export interface ShotReplay { id:string; actor:number; before:Ball[]; command:ShotCommand; startsAt:number; duration:number }
+export interface PlacementPreview {x:number;y:number;confirmed:boolean;sequence:number}
 export interface RoomView {
   code:string; revision:number; seat:number; ready:boolean; closed:boolean;
   match:MatchState; replay:ShotReplay|null; availableAt:number; serverNow:number;
   opponentOnline:boolean; rematchVotes:number[]; expiresAt:number;
+  placementPreview?:PlacementPreview|null;
+}
+export function validatePlacement(balls:Ball[],value:unknown):{x:number;y:number}{
+  const at=value as {x:number;y:number};
+  if(!at||!Number.isFinite(at.x)||!Number.isFinite(at.y)||at.x<bounds.left+R||at.x>bounds.right-R||at.y<bounds.top+R||at.y>bounds.bottom-R||
+    pockets.some(h=>Math.hypot(at.x-h.x,at.y-h.y)<24)||balls.some(b=>b.id&&!b.sunk&&Math.hypot(b.x-at.x,b.y-at.y)<R*2+1))
+    throw new Error('Place the cue ball on clear felt, away from a pocket.');
+  return {x:at.x,y:at.y};
 }
 export function initialMatch():MatchState {
   return {balls:new Physics().balls,shots:0,player:0,groups:[null,null],winner:null,placement:false,message:'Player 1 to break. The table is open.'};
@@ -32,9 +41,7 @@ export function simulateShot(state:MatchState,command:ShotCommand) {
   if(state.winner!==null)throw new Error('This match is finished.');
   const input=validateCommand(command),p=new Physics();p.balls=structuredClone(state.balls);
   if(state.placement){
-    const at=input.position;
-    if(!at||at.x<bounds.left+R||at.x>bounds.right-R||at.y<bounds.top+R||at.y>bounds.bottom-R||
-      pockets.some(h=>Math.hypot(at.x-h.x,at.y-h.y)<24)||!p.place(at.x,at.y))throw new Error('Place the cue ball on clear felt, away from a pocket.');
+    const at=validatePlacement(p.balls,input.position);p.place(at.x,at.y);
   }else if(input.position)throw new Error('You do not have ball in hand.');
   const before=structuredClone(p.balls);
   p.shoot(input.angle,Math.max(80,input.power*12),input.spin);

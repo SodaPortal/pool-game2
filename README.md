@@ -32,6 +32,8 @@ On Windows PowerShell with restricted execution policies, use `npm.cmd` instead 
 
 Choose **Play online → Create room**, then **Copy invite** and send the link to a friend. They can open it on any modern browser or enter the eight-character room code. The host breaks. Shots, cue spin, fouls, groups, and turns are synchronized. After a match, both players can request a rematch.
 
+During ball in hand, the waiting player sees the opponent's cue-ball position update as they move it, with a dashed placement ring. Clicking or pressing Space confirms the location and changes the ring to solid. The preview clears when the shot begins; it does not change the table's official state until the shot is submitted.
+
 Refreshing restores your seat in the same browser; a temporary connection loss reconnects automatically. Keep the same browser profile and its site storage to retain your seat. **Leave room** closes the table for both players. Rooms expire after 24 hours without a game action. These are private two-player rooms; there is no public matchmaking or spectator mode.
 
 The server validates and simulates each shot, then clients animate it and settle onto the authoritative result. Turn-based polling works with Vercel Functions without a separate WebSocket server. Online games continue when a tab is hidden and catch up when you return.

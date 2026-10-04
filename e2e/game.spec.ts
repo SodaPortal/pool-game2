@@ -100,6 +100,8 @@ test('difficulty selection applies to new matches, persists, and cancels safely'
 
 test('spin target supports dragging, keyboard adjustments, and reset on mobile',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/');
+ // Wait for font layout before recording coordinates for a precise diagonal drag.
+ await page.evaluate(()=>document.fonts.ready);
  const target=page.getByRole('button',{name:/^Cue ball spin:/});
  await target.scrollIntoViewIfNeeded();const rect=(await target.boundingBox())!;
  await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);await page.mouse.down();

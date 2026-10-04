@@ -1,4 +1,4 @@
-import type {MatchState, ShotReplay} from '../src/online-match.js';
+import type {MatchState, ShotReplay, PlacementPreview} from '../src/online-match.js';
 
 export interface RoomRecord {
   code:string; revision:number; tokens:(string|null)[]; closed:boolean;
@@ -10,6 +10,7 @@ export interface RoomStore {
   save(code:string,revision:number,room:RoomRecord):Promise<boolean>;
   presence(code:string,seat:number,now:number):Promise<boolean>;
   limit(key:string,count:number,seconds:number):Promise<boolean>;
+  preview(code:string,revision:number,value?:PlacementPreview):Promise<PlacementPreview|null>;
 }
 const TTL=86400;
 export class RedisRoomStore implements RoomStore {
@@ -21,6 +22,14 @@ export class RedisRoomStore implements RoomStore {
     return data.result;
   }
   async get(code:string){const raw=await this.command(['GET',`pool:room:${code}`]);return raw?JSON.parse(raw) as RoomRecord:null;}
+  async preview(code:string,revision:number,value?:PlacementPreview):Promise<PlacementPreview|null>{
+    const key=`pool:placement:${code}:${revision}`;
+    if(value){
+      const script="local old=redis.call('GET',KEYS[1]); if not old or cjson.decode(old).sequence<tonumber(ARGV[1]) then redis.call('SET',KEYS[1],ARGV[2],'EX',3600) end; return 1";
+      await this.command(['EVAL',script,1,key,value.sequence,JSON.stringify(value)]);return value;
+    }
+    const raw=await this.command(['GET',key]);return raw?JSON.parse(raw):null;
+  }
   async create(room:RoomRecord){return await this.command(['SET',`pool:room:${room.code}`,JSON.stringify(room),'EX',TTL,'NX'])==='OK';}
   async save(code:string,revision:number,room:RoomRecord){
     const script="local raw=redis.call('GET',KEYS[1]); if not raw then return 0 end; if cjson.decode(raw).revision~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1";
@@ -42,6 +51,12 @@ export class MemoryRoomStore implements RoomStore {
   private rooms=new Map<string,RoomRecord>();
   private seen=new Map<string,number>();
   private counts=new Map<string,{value:number;until:number}>();
+  private previews=new Map<string,{value:PlacementPreview;until:number}>();
+  async preview(code:string,revision:number,value?:PlacementPreview){
+    const key=`${code}:${revision}`,old=this.previews.get(key);
+    if(value&&(!old||old.until<Date.now()||old.value.sequence<value.sequence))this.previews.set(key,{value:structuredClone(value),until:Date.now()+3600000});
+    const current=this.previews.get(key);return current&&current.until>Date.now()?structuredClone(current.value):null;
+  }
   async get(code:string){const room=this.rooms.get(code);return room&&room.expiresAt>Date.now()?structuredClone(room):null;}
   async create(room:RoomRecord){if(await this.get(room.code))return false;this.rooms.set(room.code,structuredClone(room));return true;}
   async save(code:string,revision:number,room:RoomRecord){const old=this.rooms.get(code);if(!old||old.revision!==revision)return false;this.rooms.set(code,structuredClone(room));return true;}

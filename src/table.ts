@@ -1,5 +1,6 @@
 import { Physics, R, pockets, colors, bounds } from './physics';
-export interface View {angle:number;power:number;aim:boolean;dragging:boolean;guide:boolean;placement:boolean;theme:string;}
+import type {PlacementPreview} from './online-match';
+export interface View {angle:number;power:number;aim:boolean;dragging:boolean;guide:boolean;placement:boolean;theme:string;cuePreview?:PlacementPreview|null;}
 export function draw(ctx:CanvasRenderingContext2D, physics:Physics, v:View){
   const c=ctx; c.clearRect(0,0,1100,620);
   function rect(x:number,y:number,w:number,h:number,r:number,fill:string){c.beginPath();c.roundRect(x,y,w,h,r);c.fillStyle=fill;c.fill();}
@@ -34,7 +35,7 @@ export function draw(ctx:CanvasRenderingContext2D, physics:Physics, v:View){
     }
     c.save();c.translate(cue.x,cue.y);c.rotate(v.angle);const pull=22+(v.dragging?v.power*1.05:8);const g=c.createLinearGradient(-pull-270,0,-pull,0);g.addColorStop(0,'#4b3024');g.addColorStop(.36,'#97654a');g.addColorStop(.38,'#222b26');g.addColorStop(.43,'#ddd3a6');g.addColorStop(1,'#e5d0a0');c.fillStyle=g;c.beginPath();c.moveTo(-pull,-2);c.lineTo(-pull-270,-5);c.lineTo(-pull-270,5);c.lineTo(-pull,2);c.closePath();c.fill();c.fillStyle='#82c8c0';c.fillRect(-pull,-2,4,4);c.restore();
   }
-  for(const b of physics.balls){if(b.sunk)continue;
+  for(const ball of physics.balls){const b=ball.id===0&&v.cuePreview?{...ball,...v.cuePreview,sunk:false}:ball;if(b.sunk)continue;
     c.save();c.translate(b.x,b.y);c.shadowColor='#001b18aa';c.shadowBlur=5;c.shadowOffsetY=4;
     c.beginPath();c.arc(0,0,R,0,Math.PI*2);c.fillStyle=b.id>8?'#eeeada':colors[b.id];c.fill();c.shadowBlur=0;c.shadowOffsetY=0;
     if(b.id>8){c.save();c.beginPath();c.arc(0,0,R,0,Math.PI*2);c.clip();c.rotate(Math.sin(b.rotation*.25)*.6);c.fillStyle=colors[b.id-8];c.fillRect(-R,-6.5,R*2,13);c.restore();}
@@ -43,4 +44,8 @@ export function draw(ctx:CanvasRenderingContext2D, physics:Physics, v:View){
     c.beginPath();c.ellipse(-3.5,-5,2.8,1.5,-.5,0,Math.PI*2);c.fillStyle='#ffffff80';c.fill();c.restore();
   }
   if(v.placement){c.strokeStyle='#e5e8aa';c.setLineDash([3,4]);c.beginPath();c.arc(cue.x,cue.y,19,0,Math.PI*2);c.stroke();c.setLineDash([]);}
+  if(v.cuePreview){
+    const p=v.cuePreview;c.save();c.strokeStyle='#baf8e6';c.lineWidth=2;c.setLineDash(p.confirmed?[]:[4,5]);c.beginPath();c.arc(p.x,p.y,20,0,Math.PI*2);c.stroke();
+    c.fillStyle='#e3fff5';c.font='600 12px sans-serif';c.textAlign='center';c.fillText(p.confirmed?'OPPONENT PLACED':'OPPONENT PLACING',Math.max(152,Math.min(948,p.x)),p.y<115?p.y+40:p.y-30);c.restore();
+  }
 }

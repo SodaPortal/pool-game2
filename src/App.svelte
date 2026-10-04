@@ -27,6 +27,8 @@
   let computerPlan:ComputerShot|null=null, computerDelay=0;
   const computerTurn=$derived(mode==='computer'&&player===1);
   const onlineBlocked=$derived(mode==='online'&&(!room||!room.ready||room.closed||!roomConnected||roomBusy||room.seat!==player));
+  const opponentPlacement=$derived(mode==='online'&&!moving&&!!room?.match.placement&&room.match.player!==room.seat&&!room.closed);
+  const cuePreview=$derived(opponentPlacement?room?.placementPreview:null);
   const active=$derived(!moving&&!paused&&!modal&&!winner&&!computerTurn&&!onlineBlocked);
   function playerName(index:number){return mode==='online'?(index===room?.seat?'You':'Opponent'):mode==='computer'?(index===0?'You':'Computer'):`Player ${index+1}`;}
   const potted=$derived(sunk.filter(n=>n>0).length);
@@ -131,15 +133,16 @@
     if(mode==='practice'&&sunk.length===15){winner='Table cleared';message=`All fifteen, in ${shots} shots. That deserves another round.`;if(!best||shots<best){best=shots;try{localStorage.setItem('after-hours-best',String(best));}catch{}}}
   }
   function point(e:PointerEvent){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*1100/r.width,y:(e.clientY-r.top)*620/r.height};}
-  function pointerMove(e:PointerEvent){if(!active)return;const p=point(e);if(placement){physics.place(p.x,p.y);return;}if(dragging){dragDistance=Math.hypot(p.x-dragStart.x,p.y-dragStart.y);power=Math.min(100,Math.round(dragDistance/1.6));}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);}
-  function pointerDown(e:PointerEvent){if(!active||e.button!==0)return;const p=point(e);canvas.focus();if(placement){if(physics.place(p.x,p.y)){placement=false;message='Cue ball placed. Line up your shot.';}return;}initAudio();angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);dragStart=p;dragDistance=0;dragging=true;canvas.setPointerCapture(e.pointerId);}
+  function previewPlacement(confirmed=false){if(mode==='online')network?.previewPlacement({x:physics.balls[0].x,y:physics.balls[0].y},confirmed);}
+  function pointerMove(e:PointerEvent){if(!active)return;const p=point(e);if(placement){if(physics.place(p.x,p.y))previewPlacement();return;}if(dragging){dragDistance=Math.hypot(p.x-dragStart.x,p.y-dragStart.y);power=Math.min(100,Math.round(dragDistance/1.6));}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);}
+  function pointerDown(e:PointerEvent){if(!active||e.button!==0)return;const p=point(e);canvas.focus();if(placement){if(physics.place(p.x,p.y)){previewPlacement(true);placement=false;message='Cue ball placed. Line up your shot.';}return;}initAudio();angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);dragStart=p;dragDistance=0;dragging=true;canvas.setPointerCapture(e.pointerId);}
   function pointerUp(e:PointerEvent){if(!dragging)return;dragging=false;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);if(dragDistance>8)shoot();else power=65;}
   function keydown(e:KeyboardEvent){
     if(e.key==='Escape'){if(modal)modal=null;else if(mode!=='online')paused=!paused;dragging=false;return;}
     if((e.target as HTMLElement)?.matches('input,select,button'))return;
     if(!active)return;
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))e.preventDefault();
-    if(placement){const b=physics.balls[0];if(e.key==='ArrowLeft')physics.place(b.x-10,b.y);if(e.key==='ArrowRight')physics.place(b.x+10,b.y);if(e.key==='ArrowUp')physics.place(b.x,b.y-10);if(e.key==='ArrowDown')physics.place(b.x,b.y+10);if(e.key===' '){placement=false;message='Cue ball placed. Line up your shot.';}return;}
+    if(placement){const b=physics.balls[0];if(e.key==='ArrowLeft')physics.place(b.x-10,b.y);if(e.key==='ArrowRight')physics.place(b.x+10,b.y);if(e.key==='ArrowUp')physics.place(b.x,b.y-10);if(e.key==='ArrowDown')physics.place(b.x,b.y+10);if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))previewPlacement(e.key===' ');if(e.key===' '){placement=false;message='Cue ball placed. Line up your shot.';}return;}
     if(e.key==='ArrowLeft')angle-=e.shiftKey?.003:.025;
     if(e.key==='ArrowRight')angle+=e.shiftKey?.003:.025;
     if(e.key==='ArrowUp')power=Math.min(100,power+5);
@@ -158,7 +161,7 @@
     function loop(now:number){const dt=oldTime?Math.min((now-oldTime)/1000,.05):0;oldTime=now;
       if(mode==='online'){onlineTick();if(room?.ready&&!winner&&!room.closed){timer+=dt;elapsed=Math.floor(timer);}}
       else if(!paused&&!modal&&!winner){if(shots){timer+=dt;elapsed=Math.floor(timer);}if(moving){accumulator+=dt;while(accumulator>=1/240){physics.step(1/240);accumulator-=1/240;}if(!physics.moving&&now-shotStart>100)finishShot();}else updateComputer(dt);}
-      context.setTransform(canvas.width/1100,0,0,canvas.height/620,0,0);draw(context,physics,{angle,power,aim:!moving&&!winner,dragging,guide,placement,theme});frame=requestAnimationFrame(loop);
+      context.setTransform(canvas.width/1100,0,0,canvas.height/620,0,0);draw(context,physics,{angle,power,aim:!moving&&!winner&&!opponentPlacement,dragging,guide,placement,theme,cuePreview});frame=requestAnimationFrame(loop);
     }
     frame=requestAnimationFrame(loop);const change=()=>fullscreen=!!document.fullscreenElement;
     const visibility=()=>{if(mode==='online'){if(!document.hidden)void network?.poll();return;}if(document.hidden&&shots&&!winner){paused=true;dragging=false;}};
@@ -191,7 +194,7 @@
           <canvas bind:this={canvas} aria-label="Pool table. Aim with the pointer, drag backward and release to shoot. Keyboard: left and right to aim, up and down for power, space to shoot." tabindex="0" onpointermove={pointerMove} onpointerdown={pointerDown} onpointerup={pointerUp} onpointercancel={()=>dragging=false}>Your browser needs canvas support to play pool.</canvas>
           {#if paused||winner}<div class="table-overlay"><div><span class="eyebrow">{winner?'WELL PLAYED':'TAKE YOUR TIME'}</span><h2>{winner??'A little breather.'}</h2><p>{winner?message:'Your table will be right here.'}</p><button class="primary-button" disabled={mode==='online'&&(roomBusy||!!room?.closed||!!room?.rematchVotes.includes(room?.seat))} onclick={()=>winner?newGame():paused=false}>{winner?(mode==='online'?(room?.rematchVotes.includes(room?.seat)?'Waiting for your friend':'Request rematch'):'Play another round'):'Back to the table'}<Icon name="arrow" size={18}/></button></div></div>{/if}
         </div>
-        <div class="table-message" aria-live="polite"><span class="message-dot"></span>{message}<span class="key-hint">{mode==='online'&&onlineBlocked?'ONLINE TABLE':computerTurn?'COMPUTER’S TURN':placement?'CLICK TO PLACE':dragging?'RELEASE TO SHOOT':'AIM · PULL BACK · RELEASE'}</span></div>
+        <div class="table-message" aria-live="polite"><span class="message-dot"></span>{opponentPlacement?(cuePreview?.confirmed?"Opponent placed the cue ball. Lining up a shot.":"Opponent is choosing a cue-ball position."):message}<span class="key-hint">{mode==='online'&&onlineBlocked?'ONLINE TABLE':computerTurn?'COMPUTER’S TURN':placement?'CLICK TO PLACE':dragging?'RELEASE TO SHOOT':'AIM · PULL BACK · RELEASE'}</span></div>
         <div class="controls"><div class="aim-help"><Icon name="mouse" size={25}/><div><strong>{computerTurn?'A worthy opponent.':'Your next great shot.'}</strong><span>{computerTurn?'Watch the computer find its angle.':'Point to aim. Drag back to power up.'}</span></div></div><div class="power-control"><label for="power">SHOT POWER <span>{Math.round(power)}%</span></label><input id="power" type="range" min="5" max="100" bind:value={power} disabled={!active||placement} style={`--power:${power}%`}/></div><button class="shoot-button" disabled={!active||placement} onclick={shoot}>{computerTurn?'Computer’s turn':mode==='online'&&roomBusy?'Sending shot':mode==='online'&&onlineBlocked?'Waiting for friend':'Take shot'} <Icon name="arrow" size={17}/></button><button class="icon-button pause-button" aria-label={paused?'Resume game':'Pause game'} title={paused?'Resume':'Pause'} disabled={!!winner||mode==='online'} onclick={()=>{paused=!paused;dragging=false;}}><Icon name={paused?'play':'pause'} size={18}/></button></div>
         <SpinControl bind:value={spin} disabled={!active||placement||dragging}/>
       </section>
