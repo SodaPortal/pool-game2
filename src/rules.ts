@@ -1,4 +1,4 @@
-import type { Shot, Ball } from './physics';
+import type { Shot, Ball } from './physics.js';
 export type Group='solids'|'stripes';
 export const inGroup=(id:number,group:Group)=>group==='solids'?id>0&&id<8:id>8;
 export interface Ruling { foul:string|null; keepTurn:boolean; assigned:Group|null; winner:'shooter'|'opponent'|null }

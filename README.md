@@ -1,6 +1,6 @@
 # pool-game2 — After Hours: The Pool Club
 
-A responsive browser pool game built with Svelte 5, TypeScript, Vite, Canvas 2D, and Web Audio. No backend or account required.
+A responsive browser pool game built with Svelte 5, TypeScript, Vite, Canvas 2D, and Web Audio. Play solo, against the computer, on one device, or online with a friend. No player accounts required.
 
 **Play live:** https://pool-game2.vercel.app
 
@@ -28,6 +28,25 @@ On Windows PowerShell with restricted execution policies, use `npm.cmd` instead 
 - Choose **Easy**, **Medium**, or **Hard** in the New game dialog before starting a computer match. Medium is the initial default. Easy considers 6 shots and has greater aim/power variation; Medium considers 12 with smaller errors; Hard considers 24 with precise execution. Your chosen level is remembered in this browser. Use **Change** beside the active difficulty to start a new match at another level; canceling keeps the current match unchanged.
 - Local two-player: simplified eight-ball, alternating on the same device. Groups are assigned by the first legal pot after the break. Pocket your group, then the eight on a subsequent shot. A legal pot keeps your turn. Scratches, incorrect first contact, and no cushion/pot after contact give the opponent ball in hand. An early eight or eight with a foul loses; an eight on the break is re-spotted. Pockets are not called.
 
+## Online play
+
+Choose **Play online → Create room**, then **Copy invite** and send the link to a friend. They can open it on any modern browser or enter the eight-character room code. The host breaks. Shots, cue spin, fouls, groups, and turns are synchronized. After a match, both players can request a rematch.
+
+Refreshing restores your seat in the same browser; a temporary connection loss reconnects automatically. Keep the same browser profile and its site storage to retain your seat. **Leave room** closes the table for both players. Rooms expire after 24 hours without a game action. These are private two-player rooms; there is no public matchmaking or spectator mode.
+
+The server validates and simulates each shot, then clients animate it and settle onto the authoritative result. Turn-based polling works with Vercel Functions without a separate WebSocket server. Online games continue when a tab is hidden and catch up when you return.
+
+### Development and hosting
+
+`npm run dev` provides an in-memory room service for local testing. Restarting the development server clears those rooms. Production uses the `/api/room` Vercel Function and Upstash Redis, with atomic room updates and expiring records. Configure these server-only environment variables through Vercel's Upstash integration:
+
+- `KV_REST_API_URL`
+- `KV_REST_API_TOKEN`
+
+`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are also supported. Never prefix these variables with `VITE_` or commit their values. Seat credentials stay in each browser's local storage and are stored only as hashes on the server; invite links contain only the room code.
+
+The deployed database uses Upstash's Free plan with automatic paid upgrades disabled. Online availability is subject to the hosting and database quotas. Static-only hosting supports the local modes but requires a compatible room backend for online play.
+
 ## Checks
 
 ```sh
@@ -38,7 +57,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm run preview` serves the production build. Deploy `dist/` to any static host.
+`npm run preview` serves the static production build; use `npm run dev` or Vercel to exercise the room API.
 
 The production app is hosted on Vercel as `sodaportals-projects/pool-game2`, connected to the GitHub repository `SodaPortal/pool-game2`. Pushes to `main` automatically deploy to https://pool-game2.vercel.app; other branches receive preview deployments. `vercel.json` configures the Vite build. For a manual deployment after logging in and linking this project with the Vercel CLI, run `npx vercel deploy --prod`.
 
@@ -46,4 +65,4 @@ Physics runs at a fixed 240 Hz independently of rendering, with equal-mass colli
 
 The computer ranks clear potting paths, contact shots, and one-cushion escapes, then evaluates up to 24 candidates using cloned instances of the same physics and rules. It tries to pot its group and avoids scratches and early eights. All computation happens locally; no service or API key is needed.
 
-This is a local game without online matchmaking. Physics approximates a flat table; jump shots, masse, swerve, and spin-induced object-ball throw are not simulated.
+Physics approximates a flat table; jump shots, masse, swerve, and spin-induced object-ball throw are not simulated.
