@@ -2,17 +2,21 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import SpinControl from './SpinControl.svelte';
+  import MobileControls from './MobileControls.svelte';
   import { Physics, colors, type CueSpin } from './physics';
   import { draw } from './table';
   import { evaluate, inGroup, type Group } from './rules';
   import { chooseComputerShot, DIFFICULTIES, difficultyLevels, isDifficulty, type Difficulty, type ComputerShot } from './computer';
   import {RoomClient} from './online-client';
   import type {RoomView,MatchState} from './online-match';
+  import {validatePlacement} from './online-match';
   const physics=new Physics();
   let canvas:HTMLCanvasElement;
+  let stage:HTMLDivElement;
+  let mobile=$state(false),portrait=$state(false),touchPointer:number|null=null;
   let mode=$state<'practice'|'versus'|'computer'|'online'>('practice');
   let difficulty=$state<Difficulty>('medium'), selectedDifficulty=$state<Difficulty>('medium');
-  let modal=$state<'help'|'new'|'online'|null>(null);
+  let modal=$state<'help'|'new'|'online'|'menu'|'spin'|null>(null);
   let room=$state<RoomView|null>(null),roomBusy=$state(false),roomConnected=$state(false),roomError=$state(''),joinCode=$state(''),copied=$state(false);
   let network:RoomClient|null=null,roomRevision=0,replayId:string|null=null,replaySteps=0;
   let paused=$state(false), moving=$state(false), sound=$state(true), guide=$state(true), theme=$state('green');
@@ -31,7 +35,8 @@
   const cuePreview=$derived(opponentPlacement?room?.placementPreview:null);
   const watchingOpponent=$derived(mode==='online'&&!!room&&room.seat!==room.match.player);
   const opponentAim=$derived(watchingOpponent&&!moving&&!winner&&!room?.closed?room?.aimPreview:null);
-  const active=$derived(!moving&&!paused&&!modal&&!winner&&!computerTurn&&!onlineBlocked);
+  const canAct=$derived(!moving&&!paused&&!winner&&!computerTurn&&!onlineBlocked);
+  const active=$derived(canAct&&!modal);
   $effect(()=>{
     if(mode==='online'&&room&&active&&!placement)network?.previewAim(angle,power,dragging,{x:physics.balls[0].x,y:physics.balls[0].y});
   });
@@ -137,11 +142,13 @@
     sunk=physics.balls.filter(b=>b.sunk&&b.id>0).map(b=>b.id);
     if(mode==='practice'&&sunk.length===15){winner='Table cleared';message=`All fifteen, in ${shots} shots. That deserves another round.`;if(!best||shots<best){best=shots;try{localStorage.setItem('after-hours-best',String(best));}catch{}}}
   }
-  function point(e:PointerEvent){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*1100/r.width,y:(e.clientY-r.top)*620/r.height};}
+  function point(e:PointerEvent){const r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;return mobile&&portrait?{x:(1-y)*1100,y:x*620}:{x:x*1100,y:y*620};}
+  function confirmPlacement(){if(!active||!placement)return;try{validatePlacement(physics.balls,physics.balls[0]);}catch{message='Choose clear felt, away from the pockets.';return;}previewPlacement(true);placement=false;message='Cue ball placed. Line up your shot.';}
+  function cancelPointer(){touchPointer=null;dragging=false;}
   function previewPlacement(confirmed=false){if(mode==='online')network?.previewPlacement({x:physics.balls[0].x,y:physics.balls[0].y},confirmed);}
-  function pointerMove(e:PointerEvent){if(!active)return;const p=point(e);if(placement){if(physics.place(p.x,p.y))previewPlacement();return;}if(dragging){dragDistance=Math.hypot(p.x-dragStart.x,p.y-dragStart.y);power=Math.min(100,Math.round(dragDistance/1.6));}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);}
-  function pointerDown(e:PointerEvent){if(!active||e.button!==0)return;const p=point(e);canvas.focus();if(placement){if(physics.place(p.x,p.y)){previewPlacement(true);placement=false;message='Cue ball placed. Line up your shot.';}return;}initAudio();angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);dragStart=p;dragDistance=0;dragging=true;canvas.setPointerCapture(e.pointerId);}
-  function pointerUp(e:PointerEvent){if(!dragging)return;dragging=false;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);if(dragDistance>8)shoot();else power=65;}
+  function pointerMove(e:PointerEvent){if(!active||(mobile&&touchPointer!==e.pointerId))return;const p=point(e);if(placement){if(physics.place(p.x,p.y))previewPlacement();return;}if(dragging){dragDistance=Math.hypot(p.x-dragStart.x,p.y-dragStart.y);power=Math.min(100,Math.round(dragDistance/1.6));}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);}
+  function pointerDown(e:PointerEvent){if(!active||e.button!==0)return;const p=point(e);canvas.focus({preventScroll:true});if(mobile){if(touchPointer!==null)return;touchPointer=e.pointerId;canvas.setPointerCapture(e.pointerId);if(placement){if(physics.place(p.x,p.y))previewPlacement();}else angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);return;}if(placement){if(physics.place(p.x,p.y)){previewPlacement(true);placement=false;message='Cue ball placed. Line up your shot.';}return;}initAudio();angle=Math.atan2(p.y-physics.balls[0].y,p.x-physics.balls[0].x);dragStart=p;dragDistance=0;dragging=true;canvas.setPointerCapture(e.pointerId);}
+  function pointerUp(e:PointerEvent){if(mobile){if(touchPointer===e.pointerId)touchPointer=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);return;}if(!dragging)return;dragging=false;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);if(dragDistance>8)shoot();else power=65;}
   function keydown(e:KeyboardEvent){
     if(e.key==='Escape'){if(modal)modal=null;else if(mode!=='online')paused=!paused;dragging=false;return;}
     if((e.target as HTMLElement)?.matches('input,select,button'))return;
@@ -161,24 +168,34 @@
     try{const saved=localStorage.getItem('after-hours-difficulty');if(isDifficulty(saved))difficulty=selectedDifficulty=saved;}catch{}
     const invite=new URL(location.href).searchParams.get('room');if(invite){joinCode=invite.toUpperCase();modal='online';void enterRoom(joinCode);}
     physics.onHit=tickSound;const context=canvas.getContext('2d')!;
-    const resize=()=>{const r=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);};
-    const observer=new ResizeObserver(resize);observer.observe(canvas);resize();
+    const resize=()=>{
+      const nextMobile=matchMedia('(max-width:700px), (max-width:1000px) and (max-height:500px)').matches,nextPortrait=innerHeight>innerWidth;
+      if(mobile!==nextMobile||portrait!==nextPortrait)cancelPointer();mobile=nextMobile;portrait=nextPortrait;
+      if(mobile){const ratio=portrait?620/1100:1100/620,w=Math.min(stage.clientWidth,stage.clientHeight*ratio);canvas.style.width=`${w}px`;canvas.style.height=`${w/ratio}px`;}
+      else{canvas.style.width='';canvas.style.height='';}
+      const r=canvas.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);
+    };
+    let resizeFrame=0;
+    const scheduleResize=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(resize);};
+    const observer=new ResizeObserver(scheduleResize);observer.observe(stage);window.addEventListener('resize',scheduleResize);resize();
     function loop(now:number){const dt=oldTime?Math.min((now-oldTime)/1000,.05):0;oldTime=now;
       if(mode==='online'){onlineTick();if(room?.ready&&!winner&&!room.closed){timer+=dt;elapsed=Math.floor(timer);}}
       else if(!paused&&!modal&&!winner){if(shots){timer+=dt;elapsed=Math.floor(timer);}if(moving){accumulator+=dt;while(accumulator>=1/240){physics.step(1/240);accumulator-=1/240;}if(!physics.moving&&now-shotStart>100)finishShot();}else updateComputer(dt);}
-      context.setTransform(canvas.width/1100,0,0,canvas.height/620,0,0);draw(context,physics,{angle:opponentAim?.angle??angle,power:opponentAim?.power??power,aim:watchingOpponent?!!opponentAim:!moving&&!winner,dragging:opponentAim?.dragging??dragging,guide:guide&&!watchingOpponent,placement,theme,cuePreview,opponentAim});frame=requestAnimationFrame(loop);
+      if(mobile&&portrait)context.setTransform(0,-canvas.height/1100,canvas.width/620,0,0,canvas.height);else context.setTransform(canvas.width/1100,0,0,canvas.height/620,0,0);
+      draw(context,physics,{angle:opponentAim?.angle??angle,power:opponentAim?.power??power,aim:watchingOpponent?!!opponentAim:!moving&&!winner,dragging:opponentAim?.dragging??dragging,guide:guide&&!watchingOpponent,placement,theme,cuePreview,opponentAim});frame=requestAnimationFrame(loop);
     }
     frame=requestAnimationFrame(loop);const change=()=>fullscreen=!!document.fullscreenElement;
     const visibility=()=>{if(mode==='online'){if(!document.hidden)void network?.poll();return;}if(document.hidden&&shots&&!winner){paused=true;dragging=false;}};
     document.addEventListener('fullscreenchange',change);document.addEventListener('visibilitychange',visibility);
-    return()=>{network?.stop();cancelAnimationFrame(frame);observer.disconnect();document.removeEventListener('fullscreenchange',change);document.removeEventListener('visibilitychange',visibility);void audio?.close();};
+    return()=>{network?.stop();cancelAnimationFrame(frame);cancelAnimationFrame(resizeFrame);observer.disconnect();window.removeEventListener('resize',scheduleResize);document.removeEventListener('fullscreenchange',change);document.removeEventListener('visibilitychange',visibility);void audio?.close();};
   });
 </script>
 
 <svelte:window onkeydown={keydown}/>
 
-<div class="app-shell">
-  <header>
+<div class="app-shell" class:mobile-ui={mobile} class:mobile-portrait={mobile&&portrait} class:mobile-landscape={mobile&&!portrait}>
+  {#if mobile}<header class="mobile-header"><span class="mobile-brand"><span>8</span> after hours</span><div><button onclick={openNewGame}>New game</button><button aria-label="Game menu" onclick={()=>modal='menu'}><Icon name="menu"/></button></div></header>{/if}
+  <header class="desktop-header">
     <a class="brand" href="./" aria-label="After Hours home"><span class="brand-mark">8<span>✦</span></span><span>after hours<span class="brand-caption">THE POOL CLUB</span></span></a>
     <nav aria-label="Main navigation"><span class="nav-active">The table</span><button onclick={()=>modal='help'}>How to play <span>↗</span></button></nav>
     <div class="header-right"><span class="live-dot"></span> ALWAYS OPEN <span class="header-divider"></span><span class="club-number">EST. 2026</span></div>
@@ -194,14 +211,18 @@
         {#if mode==='online'&&room}<div class="room-banner"><div><span class="card-kicker">PRIVATE TABLE</span><strong class="room-code">{room.code}</strong><span class="room-status">{room.closed?'Room closed':!roomConnected?'Reconnecting. Your seat is saved.':!room.ready?'Waiting for your friend':room.opponentOnline?'Both players connected':'Your friend is reconnecting'}</span></div><div class="room-banner-actions"><button onclick={copyRoom}>{copied?'Link copied':'Copy invite link'}</button><button onclick={()=>newGame('practice')}>Leave room</button></div></div>{#if roomError}<p class="room-error" role="alert">{roomError}</p>{/if}{/if}
         <div class="scorebar"><div class="player-label"><span class="avatar">{mode==='practice'?'Y':mode==='computer'?(player===0?'Y':'C'):player+1}</span><div><strong>{mode==='practice'?'Just you & the table':playerName(player)}</strong><span>{mode==='practice'?'No rush. Make it count.':groups[player]?`${groups[player]} · ${physics.balls.filter(b=>inGroup(b.id,groups[player]!)&&!sunk.includes(b.id)).length} remaining`:'Open table · break the ice'}</span></div></div><div class="rack-progress" aria-label={`${potted} balls pocketed`}>{#each Array.from({length:15},(_,i)=>i+1) as id}<span class="mini-ball" class:pocketed={sunk.includes(id)} class:striped={id>8} style={`--ball:${colors[id>8?id-8:id]}`}>{id}</span>{/each}</div><div class="shot-count"><span>SHOT</span><strong>{String(shots+(!winner?1:0)).padStart(2,'0')}</strong></div></div>
 
-        <div class="table-stage">
+        <div class="table-stage" bind:this={stage}>
           <div class="table-glow"></div>
-          <canvas bind:this={canvas} aria-label="Pool table. Aim with the pointer, drag backward and release to shoot. Keyboard: left and right to aim, up and down for power, space to shoot." tabindex="0" onpointermove={pointerMove} onpointerdown={pointerDown} onpointerup={pointerUp} onpointercancel={()=>dragging=false}>Your browser needs canvas support to play pool.</canvas>
+          <canvas bind:this={canvas} aria-label={mobile?"Pool table. Touch and slide to aim. Use Fine aim for precision, then Take shot. With ball in hand, touch to position, then Place cue ball.":"Pool table. Aim with the pointer, drag backward and release to shoot. Keyboard: left and right to aim, up and down for power, space to shoot."} tabindex="0" onpointermove={pointerMove} onpointerdown={pointerDown} onpointerup={pointerUp} onpointercancel={cancelPointer} onlostpointercapture={cancelPointer}>Your browser needs canvas support to play pool.</canvas>
           {#if paused||winner}<div class="table-overlay"><div><span class="eyebrow">{winner?'WELL PLAYED':'TAKE YOUR TIME'}</span><h2>{winner??'A little breather.'}</h2><p>{winner?message:'Your table will be right here.'}</p><button class="primary-button" disabled={mode==='online'&&(roomBusy||!!room?.closed||!!room?.rematchVotes.includes(room?.seat))} onclick={()=>winner?newGame():paused=false}>{winner?(mode==='online'?(room?.rematchVotes.includes(room?.seat)?'Waiting for your friend':'Request rematch'):'Play another round'):'Back to the table'}<Icon name="arrow" size={18}/></button></div></div>{/if}
         </div>
-        <div class="table-message" aria-live="polite"><span class="message-dot"></span>{opponentPlacement?(cuePreview?.confirmed?"Opponent placed the cue ball. Lining up a shot.":"Opponent is choosing a cue-ball position."):message}<span class="key-hint">{mode==='online'&&onlineBlocked?'ONLINE TABLE':computerTurn?'COMPUTER’S TURN':placement?'CLICK TO PLACE':dragging?'RELEASE TO SHOOT':'AIM · PULL BACK · RELEASE'}</span></div>
+        <div class="table-message" aria-live="polite"><span class="message-dot"></span>{opponentPlacement?(cuePreview?.confirmed?"Opponent placed the cue ball. Lining up a shot.":"Opponent is choosing a cue-ball position."):mobile&&shots===0&&mode==='practice'?"Touch the table to aim. Set power, then Take shot.":message}<span class="key-hint">{mode==='online'&&onlineBlocked?'ONLINE TABLE':computerTurn?'COMPUTER’S TURN':placement?'CLICK TO PLACE':dragging?'RELEASE TO SHOOT':'AIM · PULL BACK · RELEASE'}</span></div>
+        {#if mobile}
+          <MobileControls bind:angle bind:power disabled={!active} {placement} label={moving?'Balls rolling':computerTurn?'Computer?s turn':mode==='online'&&roomBusy?'Sending shot':onlineBlocked?'Waiting for friend':'Take shot'} spinActive={Math.hypot(spin.side,spin.top)>.01} online={mode==='online'} {paused} onshoot={()=>placement?confirmPlacement():shoot()} onspin={()=>modal='spin'} ononline={()=>{roomError='';modal='online';}} onpause={()=>{paused=!paused;cancelPointer();}}/>
+        {:else}
         <div class="controls"><div class="aim-help"><Icon name="mouse" size={25}/><div><strong>{computerTurn?'A worthy opponent.':'Your next great shot.'}</strong><span>{computerTurn?'Watch the computer find its angle.':'Point to aim. Drag back to power up.'}</span></div></div><div class="power-control"><label for="power">SHOT POWER <span>{Math.round(power)}%</span></label><input id="power" type="range" min="5" max="100" bind:value={power} disabled={!active||placement} style={`--power:${power}%`}/></div><button class="shoot-button" disabled={!active||placement} onclick={shoot}>{computerTurn?'Computer’s turn':mode==='online'&&roomBusy?'Sending shot':mode==='online'&&onlineBlocked?'Waiting for friend':'Take shot'} <Icon name="arrow" size={17}/></button><button class="icon-button pause-button" aria-label={paused?'Resume game':'Pause game'} title={paused?'Resume':'Pause'} disabled={!!winner||mode==='online'} onclick={()=>{paused=!paused;dragging=false;}}><Icon name={paused?'play':'pause'} size={18}/></button></div>
         <SpinControl bind:value={spin} disabled={!active||placement||dragging}/>
+        {/if}
       </section>
 
       <aside>
@@ -218,15 +239,25 @@
 
 {#if modal}
   <div class="modal-backdrop" role="presentation" onclick={(e)=>{if(e.target===e.currentTarget)modal=null;}}>
-    <dialog class="modal" use:openDialog oncancel={(e)=>{e.preventDefault();modal=null;}} aria-label={modal==='help'?'How to play':modal==='online'?'Online multiplayer':'Start a new game'}>
+    <dialog class="modal" class:mobile-modal={mobile} use:openDialog oncancel={(e)=>{e.preventDefault();modal=null;}} aria-label={modal==='help'?'How to play':modal==='online'?'Online multiplayer':modal==='menu'?'Game menu':modal==='spin'?'Cue spin':'Start a new game'}>
       <button class="icon-button modal-close" aria-label="Close dialog" onclick={()=>modal=null}><Icon name="close"/></button>
-      <span class="eyebrow">WELCOME TO THE CLUB</span><h2>{modal==='help'?'Find your angle.':modal==='online'?'Meet at the table.':'A fresh start.'}</h2>
-      {#if modal==='online'}
+      <span class="eyebrow">WELCOME TO THE CLUB</span><h2>{modal==='help'?'Find your angle.':modal==='online'?'Meet at the table.':modal==='menu'?'Your table.':modal==='spin'?'Shape your shot.':'A fresh start.'}</h2>
+      {#if modal==='spin'}
+        <p>Move the dot to add draw, follow, or side spin.</p><SpinControl bind:value={spin} disabled={!canAct||placement}/><button class="primary-button full" onclick={()=>modal=null}>Back to the table</button>
+      {:else if modal==='menu'}
+        <div class="mobile-menu-stats"><span><strong>{potted}/15</strong> pocketed</span><span><strong>{time}</strong> played</span></div>
+        {#if mode==='computer'}<div class="current-difficulty"><span>Difficulty <strong>{DIFFICULTIES[difficulty].label}</strong></span><button onclick={openNewGame}>Change</button></div>{/if}
+        <button class="new-mode" onclick={openNewGame}><Icon name="reset"/><span><strong>Choose game mode</strong><small>Solo, computer, or a friend.</small></span><Icon name="arrow"/></button>
+        <button class="new-mode" onclick={()=>{roomError='';modal='online';}}><Icon name="globe"/><span><strong>Play online</strong><small>Create a room or join a friend.</small></span><Icon name="arrow"/></button>
+        <div class="setting-row"><span>Aim assist</span><button role="switch" aria-checked={guide} aria-label="Aim assist" class="toggle" class:enabled={guide} onclick={()=>guide=!guide}><span></span></button></div>
+        <div class="mobile-menu-actions"><button onclick={()=>{sound=!sound;initAudio();}}>{sound?'Mute sound':'Enable sound'}</button><button onclick={()=>theme=theme==='green'?'blue':'green'}>Felt: {theme==='green'?'Green':'Blue'}</button><button onclick={()=>modal='help'}>How to play</button><button onclick={toggleFullscreen}>{fullscreen?'Exit fullscreen':'Fullscreen'}</button></div>
+        <button class="primary-button full" onclick={()=>modal=null}>Back to the table</button>
+      {:else if modal==='online'}
         <p>Create a private table, then send your friend the invite link. No account needed.</p>
         {#if roomError}<p class="room-error" role="alert">{roomError}</p>{/if}
         {#if room&& !room.closed}<div class="online-current"><strong>You're at table {room.code}.</strong><p>Leave this room before opening another table.</p><button class="primary-button full" onclick={()=>modal=null}>Back to your table</button><button class="text-button" onclick={()=>{newGame('practice');modal='online';}}>Leave this room</button></div>
         {:else}<button class="primary-button full" disabled={roomBusy} onclick={()=>enterRoom()}>{roomBusy?'Connecting...':'Create room'}<Icon name="arrow" size={18}/></button><div class="join-divider">OR JOIN A FRIEND</div><form class="join-form" onsubmit={(e)=>{e.preventDefault();void enterRoom(joinCode.trim().toUpperCase());}}><label for="join-code">Room code</label><div><input id="join-code" bind:value={joinCode} placeholder="8-character code" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" disabled={roomBusy}/><button type="submit" disabled={roomBusy||joinCode.trim().length!==8}>Join room</button></div></form><p class="online-note">Your seat is saved in this browser. Refresh to rejoin if your connection drops. Rooms expire after 24 hours without a move.</p>{/if}
-      {:else if modal==='help'}<p>A good game is only a few shots away.</p><div class="help-step"><b>01</b><div><strong>Line it up</strong><p>Move your pointer over the table to aim. The dotted line previews your cue ball’s first contact.</p></div></div><div class="help-step"><b>02</b><div><strong>Make your move</strong><p>Press on the table, drag back to set power, and release. Or adjust the power slider and choose Take shot.</p></div></div><div class="help-step"><b>03</b><div><strong>Play your way</strong><p>Practice: clear all 15 balls in as few shots as possible. Play a friend or the computer: pocket your group, then the eight. A legal pot keeps your turn; a foul gives your opponent ball in hand. You break against the computer; it aims and shoots automatically on its turn.</p></div></div><div class="help-step"><b>04</b><div><strong>Give it some spin</strong><p>Drag the red dot on the cue-ball target before shooting. Top follows the object ball; bottom draws the cue ball back. Left and right change cushion rebounds. Use the sliders or arrow keys on the target for fine control. Spin resets after each shot; the aim guide shows first contact only.</p></div></div><div class="rules-note">Online play: share your room link with one friend. You each control your own turn. Refreshing restores your seat in the same browser. Online tables keep running while help is open; a rematch starts when both players agree.</div><div class="rules-note">Club rules: groups are assigned after the break. Hit your group first and pocket a ball or reach a cushion. Early eight loses; an eight on the break is re-spotted. No called pockets.</div><div class="keyboard-help"><span><kbd>←</kbd><kbd>→</kbd> Aim</span><span><kbd>↑</kbd><kbd>↓</kbd> Power</span><span><kbd>Space</kbd> Shoot</span><span><kbd>Esc</kbd> Pause</span></div><p class="access-note">Hold Shift for fine aim. With ball in hand, use arrows to position and Space to place.</p><button class="primary-button full" onclick={()=>modal=null}>Got it. Let's play.<Icon name="arrow" size={18}/></button>
+      {:else if modal==='help'}<p>A good game is only a few shots away.</p><div class="help-step"><b>01</b><div><strong>Line it up</strong><p>{mobile?"Touch and slide on the table to aim. Slide Fine aim or tap its minus and plus buttons for precise adjustments.":"Move your pointer over the table to aim. The dotted line previews the first contact."}</p></div></div><div class="help-step"><b>02</b><div><strong>Make your move</strong><p>{mobile?"Set the power, then tap Take shot. Moving your finger on the table never fires a shot. With ball in hand, move the ball and tap Place cue ball to confirm.":"Press on the table, drag back to set power, and release. Or adjust the power slider and choose Take shot."}</p></div></div><div class="help-step"><b>03</b><div><strong>Play your way</strong><p>Practice: clear all 15 balls in as few shots as possible. Play a friend or the computer: pocket your group, then the eight. A legal pot keeps your turn; a foul gives your opponent ball in hand. You break against the computer; it aims and shoots automatically on its turn.</p></div></div><div class="help-step"><b>04</b><div><strong>Give it some spin</strong><p>Drag the red dot on the cue-ball target before shooting. Top follows the object ball; bottom draws the cue ball back. Left and right change cushion rebounds. Use the sliders or arrow keys on the target for fine control. Spin resets after each shot; the aim guide shows first contact only.</p></div></div><div class="rules-note">Online play: share your room link with one friend. You each control your own turn. Refreshing restores your seat in the same browser. Online tables keep running while help is open; a rematch starts when both players agree.</div><div class="rules-note">Club rules: groups are assigned after the break. Hit your group first and pocket a ball or reach a cushion. Early eight loses; an eight on the break is re-spotted. No called pockets.</div><div class="keyboard-help"><span><kbd>←</kbd><kbd>→</kbd> Aim</span><span><kbd>↑</kbd><kbd>↓</kbd> Power</span><span><kbd>Space</kbd> Shoot</span><span><kbd>Esc</kbd> Pause</span></div><p class="access-note">Hold Shift for fine aim. With ball in hand, use arrows to position and Space to place.</p><button class="primary-button full" onclick={()=>modal=null}>Got it. Let's play.<Icon name="arrow" size={18}/></button>
       {:else}<p>{shots?'Starting a new game will reset this table.':'The felt is fresh. The night is young.'}</p><button class="new-mode" onclick={()=>newGame('practice')}><Icon name="target" size={26}/><span><strong>Solo practice</strong><small>Clear the table. Beat your personal best.</small></span><Icon name="arrow"/></button><button class="new-mode" onclick={()=>newGame('versus')}><span class="players-icon">Ⅱ</span><span><strong>Local two-player</strong><small>Classic eight-ball with a friend on this device.</small></span><Icon name="arrow"/></button><fieldset class="difficulty-picker"><legend>Computer difficulty</legend><div class="difficulty-options">{#each difficultyLevels as level}<label><input type="radio" name="difficulty" value={level} bind:group={selectedDifficulty}/><span>{DIFFICULTIES[level].label}</span></label>{/each}</div><p aria-live="polite">{DIFFICULTIES[selectedDifficulty].description}</p></fieldset><button class="new-mode" onclick={()=>newGame('computer',selectedDifficulty)}><Icon name="computer" size={26}/><span><strong>Vs computer</strong><small>{DIFFICULTIES[selectedDifficulty].label} opponent. You make the opening break.</small></span><Icon name="arrow"/></button><button class="new-mode" onclick={()=>{roomError='';modal='online';}}><Icon name="globe" size={26}/><span><strong>Online multiplayer</strong><small>Create a private room or join a friend.</small></span><Icon name="arrow"/></button><button class="text-button" onclick={()=>modal=null}>Keep my current table</button>{/if}
     </dialog>
   </div>

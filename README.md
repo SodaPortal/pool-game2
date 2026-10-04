@@ -28,6 +28,16 @@ On Windows PowerShell with restricted execution policies, use `npm.cmd` instead 
 - Choose **Easy**, **Medium**, or **Hard** in the New game dialog before starting a computer match. Medium is the initial default. Easy considers 6 shots and has greater aim/power variation; Medium considers 12 with smaller errors; Hard considers 24 with precise execution. Your chosen level is remembered in this browser. Use **Change** beside the active difficulty to start a new match at another level; canceling keeps the current match unchanged.
 - Local two-player: simplified eight-ball, alternating on the same device. Groups are assigned by the first legal pot after the break. Pocket your group, then the eight on a subsequent shot. A legal pot keeps your turn. Scratches, incorrect first contact, and no cushion/pot after contact give the opponent ball in hand. An early eight or eight with a foul loses; an eight on the break is re-spotted. Pockets are not called.
 
+## Phone controls
+
+Phones get a dedicated layout that keeps the table and shot controls on screen. The table turns upright in portrait; landscape puts the controls beside a wider table. Rotating your phone preserves the match.
+
+- Touch and slide on the table to aim. Releasing your finger never fires a shot.
+- Slide **Fine aim**, or tap its **− / +** buttons, for precise adjustments.
+- Set **Power**, then tap **Take shot**.
+- With ball in hand, touch or slide to position the ball, then tap **Place cue ball** to confirm. Your online opponent sees the preview.
+- Open **Cue spin** for draw, follow, and side spin. The menu contains settings, help, and game modes; **Play online** opens rooms directly.
+
 ## Online play
 
 Choose **Play online → Create room**, then **Copy invite** and send the link to a friend. They can open it on any modern browser or enter the eight-character room code. The host breaks. Shots, cue spin, fouls, groups, and turns are synchronized. After a match, both players can request a rematch.

@@ -24,13 +24,15 @@ test('settings, keyboard shots and accessible help work',async({page})=>{
  await page.locator('canvas').focus();await page.keyboard.press('ArrowDown');await expect(page.locator('#power')).toHaveValue('60');await page.keyboard.press('Space');await expect(page.getByRole('button',{name:'Take shot'})).toBeDisabled();
 });
 
-test('mobile layout fits and drag-to-shoot works',async({page})=>{
+test('mobile layout fits and aiming requires an explicit shot',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
  await page.screenshot({path:'test-results/mobile.png',fullPage:true});
  const rect=(await page.locator('canvas').boundingBox())!;
  await page.mouse.move(rect.x+rect.width*.65,rect.y+rect.height*.5);await page.mouse.down();await page.mouse.move(rect.x+rect.width*.45,rect.y+rect.height*.5,{steps:10});await page.mouse.up();
- await expect(page.getByRole('button',{name:'Take shot'})).toBeDisabled();
+ await expect(page.locator('.shot-count strong')).toHaveText('01');
+ await page.getByRole('button',{name:'Take shot',exact:true}).click();
+ await expect(page.locator('.mobile-shoot')).toBeDisabled();
  await expect(page.locator('.shot-count strong')).toHaveText('02');
 });
 
@@ -87,11 +89,11 @@ test('difficulty selection applies to new matches, persists, and cancels safely'
    await expect(page.locator('.current-difficulty strong')).toHaveText(level);
    expect(await page.evaluate(()=>localStorage.getItem('after-hours-difficulty'))).toBe(level.toLowerCase());
  }
- await page.getByRole('button',{name:'Change',exact:true}).click();
+ await page.getByRole('button',{name:'Game menu',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Change',exact:true}).click();
  await page.getByRole('radio',{name:'Easy',exact:true}).check();
  await page.getByRole('button',{name:'Keep my current table'}).click();
  await expect(page.locator('.current-difficulty strong')).toHaveText('Hard');
- await page.getByRole('button',{name:'Change',exact:true}).click();
+ await page.getByRole('button',{name:'Game menu',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Change',exact:true}).click();
  await expect(page.getByRole('radio',{name:'Hard',exact:true})).toBeChecked();
  await page.screenshot({path:'test-results/difficulty-mobile.png',fullPage:true});
  await page.reload();await page.getByRole('button',{name:'New game',exact:true}).click();
@@ -100,6 +102,7 @@ test('difficulty selection applies to new matches, persists, and cancels safely'
 
 test('spin target supports dragging, keyboard adjustments, and reset on mobile',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/');
+ await page.getByRole('button',{name:'Cue spin',exact:true}).click();
  // Wait for font layout before recording coordinates for a precise diagonal drag.
  await page.evaluate(()=>document.fonts.ready);
  const target=page.getByRole('button',{name:/^Cue ball spin:/});
